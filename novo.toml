@@ -1,6 +1,6 @@
 [package]
 name        = "calendar-nv"
-version     = "0.0.1"
+version     = "0.0.2"
 description = "Civil dates, times and durations with no clock in them: proleptic Gregorian construction that validates, day and month arithmetic with the end-of-month rule written down, ISO 8601 and RFC 3339 in both directions, ISO week numbers, and a strftime-shaped formatter over a named subset."
 license     = "Apache-2.0"
 
@@ -23,6 +23,7 @@ category    = "time"
 tags        = ["date", "time", "calendar", "iso8601", "rfc3339", "duration", "chrono"]
 repository  = "https://github.com/novolang/calendar-nv"
 maintainers = ["novo-lang"]
+novo        = ">= 0.8.9"
 
 # A library: no `main`, so `novo pkg build` type-checks and
 # effect-checks every module under `src/` and writes no binary.
