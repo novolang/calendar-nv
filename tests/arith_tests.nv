@@ -1,0 +1,189 @@
+// arith_tests.nv — the API suite for moving a date, and for the rule
+// that makes it ambiguous.
+//
+// RED ON PURPOSE: every body is a `todo()`.  Run with `--isolate` for
+// one verdict per `@test`.
+//
+// `test_the_end_of_month_rule` and the two below it are the ones worth
+// reading: they are the written form of the decision the README calls
+// this package's load-bearing interface, and they are what a body will
+// be judged against.
+
+use std.test
+use arith
+use civil
+use span
+
+// Fixture builders — the note is in tests/civil_tests.nv.
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    civil.date(y, m, d)!
+
+fn clock(h: Int, mi: Int, s: Int, n: Int) -> CivilTime
+    civil.time_of(h, mi, s, n)!
+
+@test
+fn test_add_days_is_exact_arithmetic() [io]
+    test.case("across a month boundary")
+    match arith.add_days(day(2026, 2, 27), 3)
+        Ok(d)  =>
+            test.assert(d.month == 3)
+            test.assert(d.day == 2)
+        Err(_) => test.fail("three days after 2026-02-27 is a date")
+
+    test.case("across a leap day")
+    match arith.add_days(day(2024, 2, 28), 1)
+        Ok(d)  => test.assert(d.day == 29)
+        Err(_) => test.fail("2024-02-29 is a date")
+
+    test.case("backwards, across a year boundary")
+    match arith.add_days(day(2026, 1, 1), -1)
+        Ok(d)  =>
+            test.assert(d.year == 2025)
+            test.assert(d.month == 12)
+            test.assert(d.day == 31)
+        Err(_) => test.fail("the day before 2026-01-01 is a date")
+
+    test.case("zero days is the same date")
+    match arith.add_days(day(2026, 3, 15), 0)
+        Ok(d)  => test.assert(d.day == 15)
+        Err(_) => test.fail("a date plus nothing is that date")
+
+@test
+fn test_the_end_of_month_rule() [io]
+    test.case("the day is CLAMPED, not rolled forward")
+    match arith.add_months(day(2026, 1, 31), 1)
+        Ok(d)  =>
+            test.assert(d.month == 2)
+            test.assert(d.day == 28)
+        Err(_) => test.fail("one month after 2026-01-31 is 2026-02-28")
+
+    test.case("and the clamp follows the leap year")
+    match arith.add_months(day(2024, 1, 31), 1)
+        Ok(d)  => test.assert(d.day == 29)
+        Err(_) => test.fail("one month after 2024-01-31 is 2024-02-29")
+
+    test.case("a day that exists in both months is untouched")
+    match arith.add_months(day(2026, 1, 15), 1)
+        Ok(d)  =>
+            test.assert(d.month == 2)
+            test.assert(d.day == 15)
+        Err(_) => test.fail("2026-02-15 is a date")
+
+    test.case("the rule is NOT reversible, and that is the contract")
+    let there = arith.add_months(day(2026, 1, 31), 1)!
+    match arith.add_months(there, -1)
+        Ok(back) => test.assert(back.day == 28)
+        Err(_)   => test.fail("2026-01-28 is a date")
+
+    test.case("months carry into years")
+    match arith.add_months(day(2026, 11, 30), 3)
+        Ok(d)  =>
+            test.assert(d.year == 2027)
+            test.assert(d.month == 2)
+            test.assert(d.day == 28)
+        Err(_) => test.fail("three months after 2026-11-30 is a date")
+
+@test
+fn test_add_years_clamps_the_leap_day() [io]
+    test.case("29 February plus a year is the 28th")
+    match arith.add_years(day(2024, 2, 29), 1)
+        Ok(d)  =>
+            test.assert(d.year == 2025)
+            test.assert(d.month == 2)
+            test.assert(d.day == 28)
+        Err(_) => test.fail("2025-02-28 is a date")
+
+    test.case("and plus four years is the 29th again")
+    match arith.add_years(day(2024, 2, 29), 4)
+        Ok(d)  => test.assert(d.day == 29)
+        Err(_) => test.fail("2028-02-29 is a date")
+
+@test
+fn test_add_delta_moves_a_wall_clock_reading() [io]
+    test.case("an hour across midnight rolls the date")
+    let dt = civil.datetime(day(2026, 3, 15), clock(23, 30, 0, 0))
+    match arith.add_delta(dt, span.hours(1))
+        Ok(x)  =>
+            test.assert(x.date.day == 16)
+            test.assert(x.time.hour == 0)
+            test.assert(x.time.minute == 30)
+        Err(_) => test.fail("an hour after 2026-03-15T23:30 is a date-time")
+
+    test.case("a negative length goes backwards")
+    match arith.add_delta(dt, span.negate(span.hours(24))!)
+        Ok(x)  =>
+            test.assert(x.date.day == 14)
+            test.assert(x.time.hour == 23)
+        Err(_) => test.fail("a day before 2026-03-15T23:30 is a date-time")
+
+    test.case("nanoseconds survive the trip")
+    let t = civil.datetime(day(2026, 3, 15), clock(0, 0, 0, 1))
+    match arith.add_delta(t, span.nanoseconds(2))
+        Ok(x)  => test.assert(x.time.nano == 3)
+        Err(_) => test.fail("three nanoseconds past midnight is a date-time")
+
+@test
+fn test_days_between_is_exact_and_signed() [io]
+    test.case("forwards")
+    let a = day(2026, 1, 1)
+    let b = day(2026, 3, 1)
+    test.assert(arith.days_between(a, b) == 59)
+
+    test.case("backwards is the negation")
+    test.assert(arith.days_between(b, a) == -59)
+
+    test.case("a date to itself is zero")
+    test.assert(arith.days_between(a, a) == 0)
+
+    test.case("and a leap year is 366")
+    test.assert(arith.days_between(day(2024, 1, 1),
+                                   day(2025, 1, 1)) == 366)
+
+@test
+fn test_months_between_counts_whole_months() [io]
+    test.case("the case that is NOT the inverse of add_months")
+    test.assert(arith.months_between(day(2026, 1, 31),
+                                     day(2026, 2, 28)) == 0)
+
+    test.case("a whole month is a whole month")
+    test.assert(arith.months_between(day(2026, 1, 15),
+                                     day(2026, 2, 15)) == 1)
+
+    test.case("one day short is still zero")
+    test.assert(arith.months_between(day(2026, 1, 15),
+                                     day(2026, 2, 14)) == 0)
+
+    test.case("backwards is signed, truncated toward zero")
+    test.assert(arith.months_between(day(2026, 3, 15),
+                                     day(2026, 1, 20)) == -1)
+
+@test
+fn test_between_is_the_exact_length() [io]
+    test.case("a working day")
+    let d = day(2026, 3, 15)
+    let a = civil.datetime(d, clock(9, 0, 0, 0))
+    let b = civil.datetime(d, clock(17, 30, 0, 0))
+    match arith.between(a, b)
+        Ok(x)  => test.assert(span.as_seconds(x) == 30600)
+        Err(_) => test.fail("eight and a half hours fits in an Int")
+
+    test.case("backwards is negative")
+    match arith.between(b, a)
+        Ok(x)  => test.assert(span.is_negative(x))
+        Err(_) => test.fail("eight and a half hours fits in an Int")
+
+@test
+fn test_the_month_boundaries() [io]
+    test.case("start_of_month")
+    test.assert(arith.start_of_month(day(2026, 3, 15)).day == 1)
+
+    test.case("end_of_month knows the four lengths")
+    test.assert(arith.end_of_month(day(2026, 1, 1)).day == 31)
+    test.assert(arith.end_of_month(day(2026, 2, 1)).day == 28)
+    test.assert(arith.end_of_month(day(2024, 2, 1)).day == 29)
+    test.assert(arith.end_of_month(day(2026, 4, 1)).day == 30)
+
+    test.case("and it stays in its own month")
+    let e = arith.end_of_month(day(2026, 2, 10))
+    test.assert(e.month == 2)
+    test.assert(e.year == 2026)

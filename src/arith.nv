@@ -1,0 +1,200 @@
+// arith.nv — moving a date, and the one rule that makes it ambiguous.
+//
+// THE END-OF-MONTH RULE
+//
+// "One month after the 31st of January" has no arithmetic answer,
+// because February has no 31st.  Every date library picks a reading and
+// most of them do not write it down.  This one does:
+//
+//     add_months(2026-01-31, 1)  ==  2026-02-28
+//     add_months(2024-01-31, 1)  ==  2024-02-29
+//
+// **The day is CLAMPED to the last day of the target month.**  That is
+// chrono's `checked_add_months`, Python's `dateutil.relativedelta`, and
+// what a person means when they say "the last of next month".  It is
+// also NOT reversible: adding a month to the 31st and subtracting one
+// gives the 28th, not the 31st.  A caller who needs the round trip
+// keeps the original date, which is a thing they can do and this
+// package cannot.
+//
+// The alternative — rolling forward into March 3rd — is what naive
+// day arithmetic produces and is what nobody means.  It is not
+// available here, and the way to get it is `add_days`, which is honest
+// about counting days.
+//
+// WHY DAYS AND MONTHS ARE DIFFERENT FUNCTIONS
+//
+// A day is a fixed length and a month is not, so `add_days` is exact
+// arithmetic on the epoch day and `add_months` is a calendar
+// operation with the clamp above.  Folding them into one
+// "add a duration" call is what forces a library to pretend a month is
+// 30 days.  `span.TimeDelta` therefore has no month unit, and there is
+// no function here that takes one.
+
+use civil
+use span
+
+// The date `n` days later, or earlier when `n` is negative.
+//
+// Exact: the epoch day plus `n`.  `Overflow` when the result leaves
+// the representable year range.
+//
+// ```novo
+// use arith
+// use civil
+//
+// fn main() [io]
+//     match arith.add_days(civil.date(2026, 2, 27)!, 3)
+//         Ok(d)  => println("${d.month}-${d.day}")        // 3-2
+//         Err(_) => println("overflow")
+// ```
+pub fn add_days(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
+    todo("calendar-nv.add_days")
+
+// The date `n` months later, with the day clamped to the last day of
+// the target month.
+//
+// The rule is at the top of this module and it is the load-bearing
+// decision of the file: `2026-01-31` plus one month is `2026-02-28`,
+// and the operation is not reversible.
+//
+// ```novo
+// use arith
+// use civil
+//
+// fn main() [io]
+//     match arith.add_months(civil.date(2026, 1, 31)!, 1)
+//         Ok(d)  => println("${d.month}-${d.day}")        // 2-28
+//         Err(_) => println("overflow")
+// ```
+pub fn add_months(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
+    todo("calendar-nv.add_months")
+
+// The date `n` years later, with the same clamp: the 29th of February
+// plus one year is the 28th.
+//
+// `add_months(d, 12 * n)` by definition, and a separate name because
+// that is what the call site means.
+//
+// ```novo
+// use arith
+// use civil
+//
+// fn main() [io]
+//     match arith.add_years(civil.date(2024, 2, 29)!, 1)
+//         Ok(d)  => println("${d.month}-${d.day}")        // 2-28
+//         Err(_) => println("overflow")
+// ```
+pub fn add_years(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
+    todo("calendar-nv.add_years")
+
+// The date-time a length of time later, or earlier when the length is
+// negative.
+//
+// Exact seconds and nanoseconds — no clamping, because a
+// `span.TimeDelta` has no months in it.  A day here is 86,400 seconds:
+// this package has no zone and therefore no daylight-saving boundary
+// to be short or long across.
+//
+// ```novo
+// use arith
+// use civil
+// use span
+//
+// fn main() [io]
+//     let dt = civil.datetime(civil.date(2026, 3, 15)!,
+//                             civil.time_of(23, 30, 0, 0)!)
+//     match arith.add_delta(dt, span.hours(1))
+//         Ok(x)  => println("${x.date.day} ${x.time.hour}")   // 16 0
+//         Err(_) => println("overflow")
+// ```
+pub fn add_delta(dt: CivilDateTime, d: TimeDelta) -> Result<CivilDateTime, CalError>
+    todo("calendar-nv.add_delta")
+
+// Whole days from `a` to `b`, negative when `b` is earlier.
+//
+// Exact, because a day between two dates is exactly a day.  This is
+// the difference operation with no caveats, which is why it returns an
+// `Int` rather than a `Result`.
+//
+// ```novo
+// use arith
+// use civil
+//
+// fn main() [io]
+//     let a = civil.date(2026, 1, 1)!
+//     let b = civil.date(2026, 3, 1)!
+//     println("${arith.days_between(a, b)}")      // 59
+// ```
+pub fn days_between(a: CivilDate, b: CivilDate) -> Int
+    todo("calendar-nv.days_between")
+
+// WHOLE months from `a` to `b`, truncated toward zero.
+//
+// "Whole" is the caveat and it is the reason this is not the inverse
+// of `add_months`: from the 31st of January to the 28th of February is
+// **0** months, because the 28th is not yet a month later by the day
+// number — even though `add_months` maps the one to the other.  A
+// difference that reported 1 there would let a caller add it back and
+// land somewhere else.
+//
+// ```novo
+// use arith
+// use civil
+//
+// fn main() [io]
+//     let a = civil.date(2026, 1, 31)!
+//     let b = civil.date(2026, 2, 28)!
+//     println("${arith.months_between(a, b)}")    // 0
+// ```
+pub fn months_between(a: CivilDate, b: CivilDate) -> Int
+    todo("calendar-nv.months_between")
+
+// The exact length of time from `a` to `b`, negative when `b` is
+// earlier.
+//
+// Seconds and nanoseconds, with no months in it — see
+// `months_between` for the calendar reading of the same question.
+//
+// ```novo
+// use arith
+// use civil
+// use span
+//
+// fn main() [io]
+//     let d = civil.date(2026, 3, 15)!
+//     let a = civil.datetime(d, civil.time_of(9, 0, 0, 0)!)
+//     let b = civil.datetime(d, civil.time_of(17, 30, 0, 0)!)
+//     match arith.between(a, b)
+//         Ok(x)  => println("${span.as_seconds(x)}")      // 30600
+//         Err(_) => println("overflow")
+// ```
+pub fn between(a: CivilDateTime, b: CivilDateTime) -> Result<TimeDelta, CalError>
+    todo("calendar-nv.between")
+
+// The first day of this date's month.
+//
+// ```novo
+// use arith
+// use civil
+//
+// fn main() [io]
+//     println("${arith.start_of_month(civil.date(2026, 3, 15)!).day}")   // 1
+// ```
+pub fn start_of_month(d: CivilDate) -> CivilDate
+    todo("calendar-nv.start_of_month")
+
+// The last day of this date's month: the 28th, 29th, 30th or 31st.
+//
+// The call the clamp in `add_months` is written in terms of, exposed
+// because "the last of the month" is a thing invoices are dated.
+//
+// ```novo
+// use arith
+// use civil
+//
+// fn main() [io]
+//     println("${arith.end_of_month(civil.date(2024, 2, 1)!).day}")      // 29
+// ```
+pub fn end_of_month(d: CivilDate) -> CivilDate
+    todo("calendar-nv.end_of_month")

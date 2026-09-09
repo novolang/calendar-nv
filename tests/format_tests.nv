@@ -1,0 +1,273 @@
+// format_tests.nv — the API suite for the two formatters: the
+// interchange one and the one a person reads.
+//
+// RED ON PURPOSE: every body is a `todo()`.  Run with `--isolate` for
+// one verdict per `@test`.
+//
+// The promise under the round-trip cases is `parse(format(x)) == x`
+// for every value this package can build.  The reverse is not
+// promised and the cases say so: `09:30`, `09:30:00` and `09:30:00.000`
+// are one value with three spellings.
+
+use std.test
+use iso8601
+use strfmt
+use civil
+use span
+use calerror
+
+// Fixture builders — the note is in tests/civil_tests.nv.
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    civil.date(y, m, d)!
+
+fn clock(h: Int, mi: Int, s: Int, n: Int) -> CivilTime
+    civil.time_of(h, mi, s, n)!
+
+@test
+fn test_parse_date_reads_three_spellings_of_a_day() [io]
+    test.case("the calendar date")
+    match iso8601.parse_date("2026-03-15")
+        Ok(d)  =>
+            test.assert(d.year == 2026)
+            test.assert(d.month == 3)
+            test.assert(d.day == 15)
+        Err(_) => test.fail("2026-03-15 is a date")
+
+    test.case("the ordinal date")
+    match iso8601.parse_date("2026-074")
+        Ok(d)  =>
+            test.assert(d.month == 3)
+            test.assert(d.day == 15)
+        Err(_) => test.fail("2026-074 is the same date")
+
+    test.case("the ISO week date")
+    match iso8601.parse_date("2026-W11-7")
+        Ok(d)  =>
+            test.assert(d.month == 3)
+            test.assert(d.day == 15)
+        Err(_) => test.fail("2026-W11-7 is the same date")
+
+    test.case("basic format without separators is refused")
+    match iso8601.parse_date("20260315")
+        Err(_) => test.assert(true)
+        Ok(_)  => test.fail("the basic format is outside this subset")
+
+    test.case("a date that does not exist is refused with its numbers")
+    match iso8601.parse_date("2023-02-29")
+        Err(DayOutOfRange(_, _, d)) => test.assert(d == 29)
+        Err(_)                      => test.fail("wrong reason")
+        Ok(_)                       => test.fail("2023 was not a leap year")
+
+@test
+fn test_parse_time_and_its_fraction() [io]
+    test.case("minutes only")
+    match iso8601.parse_time("09:30")
+        Ok(t)  =>
+            test.assert(t.hour == 9)
+            test.assert(t.second == 0)
+        Err(_) => test.fail("09:30 is a time")
+
+    test.case("a fraction becomes nanoseconds")
+    match iso8601.parse_time("09:30:00.5")
+        Ok(t)  => test.assert(t.nano == 500000000)
+        Err(_) => test.fail("09:30:00.5 is a time")
+
+    test.case("nine digits are the limit and the tenth is refused")
+    match iso8601.parse_time("09:30:00.0123456789")
+        Err(_) => test.assert(true)
+        Ok(_)  => test.fail("a tenth digit is more precision than the type has")
+
+@test
+fn test_parse_datetime_refuses_an_offset() [io]
+    test.case("a civil date-time")
+    match iso8601.parse_datetime("2026-03-15T09:30:00")
+        Ok(dt) =>
+            test.assert(dt.date.day == 15)
+            test.assert(dt.time.hour == 9)
+        Err(_) => test.fail("that is a date-time")
+
+    test.case("a space is accepted in place of the T")
+    match iso8601.parse_datetime("2026-03-15 09:30:00")
+        Ok(dt) => test.assert(dt.time.hour == 9)
+        Err(_) => test.fail("a space is an accepted separator")
+
+    test.case("a trailing Z is TrailingText, not silently ignored")
+    match iso8601.parse_datetime("2026-03-15T09:30:00Z")
+        Err(TrailingText(at)) => test.assert(at == 19)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("an offset makes it RFC 3339")
+
+@test
+fn test_rfc3339_keeps_the_offset_beside_the_value() [io]
+    test.case("the offset comes back in minutes east of UTC")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00+02:00")
+        Ok((dt, off)) =>
+            test.assert(dt.time.hour == 9)
+            test.assert(off == 120)
+        Err(_)        => test.fail("that is an RFC 3339 timestamp")
+
+    test.case("Z is zero, and so is -00:00")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00Z")
+        Ok((_, off)) => test.assert(off == 0)
+        Err(_)       => test.fail("Z is a legal offset")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00-00:00")
+        Ok((_, off)) => test.assert(off == 0)
+        Err(_)       => test.fail("-00:00 is a legal offset")
+
+    test.case("a leap second lands on the following minute")
+    match iso8601.parse_rfc3339("2016-12-31T23:59:60Z")
+        Ok((dt, _)) =>
+            test.assert(dt.date.year == 2017)
+            test.assert(dt.time.hour == 0)
+            test.assert(dt.time.second == 0)
+        Err(_)      => test.fail("RFC 3339 § 5.7 permits :60")
+
+    test.case("a missing offset is not RFC 3339")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00")
+        Err(_) => test.assert(true)
+        Ok(_)  => test.fail("RFC 3339 requires the offset")
+
+@test
+fn test_formatting_and_the_round_trip() [io]
+    let d = day(2026, 3, 15)
+    let t = clock(9, 30, 0, 0)
+    let dt = civil.datetime(d, t)
+
+    test.case("format_date")
+    test.assert(iso8601.format_date(d) == "2026-03-15")
+
+    test.case("format_time omits a zero fraction")
+    test.assert(iso8601.format_time(t) == "09:30:00")
+
+    test.case("format_datetime uses the upper-case T")
+    test.assert(iso8601.format_datetime(dt) == "2026-03-15T09:30:00")
+
+    test.case("format_rfc3339 writes Z for zero and +HH:MM otherwise")
+    test.assert(iso8601.format_rfc3339(dt, 0) == "2026-03-15T09:30:00Z")
+    test.assert(iso8601.format_rfc3339(dt, 120) == "2026-03-15T09:30:00+02:00")
+
+    test.case("parse(format(x)) is x")
+    match iso8601.parse_datetime(iso8601.format_datetime(dt))
+        Ok(back) => test.assert(civil.compare_datetime(back, dt) == 0)
+        Err(_)   => test.fail("this package cannot read its own output")
+
+    test.case("and it survives a nanosecond")
+    let precise = civil.datetime(d, clock(9, 30, 0, 123456789))
+    match iso8601.parse_datetime(iso8601.format_datetime(precise))
+        Ok(back) => test.assert(back.time.nano == 123456789)
+        Err(_)   => test.fail("this package cannot read its own output")
+
+@test
+fn test_iso_durations_have_no_months_in_them() [io]
+    test.case("parse_duration")
+    match iso8601.parse_duration("P1DT2H30M")
+        Ok(x)  => test.assert(span.as_seconds(x) == 95400)
+        Err(_) => test.fail("P1DT2H30M is a duration")
+
+    test.case("a fraction of a second")
+    match iso8601.parse_duration("PT1.5S")
+        Ok(x)  => test.assert(span.subsec_nanos(x) == 500000000)
+        Err(_) => test.fail("PT1.5S is a duration")
+
+    test.case("a leading minus")
+    match iso8601.parse_duration("-PT30M")
+        Ok(x)  => test.assert(span.as_seconds(x) == -1800)
+        Err(_) => test.fail("-PT30M is a duration")
+
+    test.case("P1M is REFUSED — a month is not a length of time")
+    match iso8601.parse_duration("P1M")
+        Err(BadFormat(_, _)) => test.assert(true)
+        Err(_)               => test.fail("wrong reason")
+        Ok(_)                => test.fail("this package will not guess 30 days")
+
+    test.case("format_duration omits zero components")
+    test.assert(iso8601.format_duration(span.minutes(150)) == "PT2H30M")
+
+    test.case("and zero is PT0S")
+    test.assert(iso8601.format_duration(span.seconds(0)) == "PT0S")
+
+@test
+fn test_strftime_over_the_named_subset() [io]
+    let dt = civil.datetime(day(2026, 3, 15), clock(9, 30, 0, 0))
+
+    test.case("format")
+    match strfmt.format(dt, "%Y-%m-%d")
+        Ok(s)  => test.assert(s == "2026-03-15")
+        Err(_) => test.fail("%Y-%m-%d is in the table")
+
+    test.case("the compound directives")
+    match strfmt.format(dt, "%F %T")
+        Ok(s)  => test.assert(s == "2026-03-15 09:30:00")
+        Err(_) => test.fail("%F and %T are in the table")
+
+    test.case("names come from the one locale")
+    match strfmt.format(dt, "%A %B")
+        Ok(s)  => test.assert(s == "Sunday March")
+        Err(_) => test.fail("%A and %B are in the table")
+
+    test.case("a literal percent")
+    match strfmt.format(dt, "100%%")
+        Ok(s)  => test.assert(s == "100%")
+        Err(_) => test.fail("%% is in the table")
+
+    test.case("a zone directive is refused, because a zone is elsewhere")
+    match strfmt.format(dt, "%Y %Z")
+        Err(UnknownDirective(_, d)) => test.assert(d == "%Z")
+        Err(_)                      => test.fail("wrong reason")
+        Ok(_)                       => test.fail("%Z needs a zone")
+
+@test
+fn test_strftime_parse_is_the_table_backwards() [io]
+    test.case("parse")
+    match strfmt.parse("15/03/2026", "%d/%m/%Y")
+        Ok(dt) =>
+            test.assert(dt.date.year == 2026)
+            test.assert(dt.date.month == 3)
+            test.assert(dt.date.day == 15)
+        Err(_) => test.fail("that input matches that format")
+
+    test.case("a missing time defaults to midnight")
+    match strfmt.parse("2026-03-15", "%F")
+        Ok(dt) => test.assert(dt.time.hour == 0)
+        Err(_) => test.fail("a date with no time is an ordinary thing to write")
+
+    test.case("a format that names no day is refused")
+    match strfmt.parse("09:30", "%H:%M")
+        Err(BadFormat(_, _)) => test.assert(true)
+        Err(_)               => test.fail("wrong reason")
+        Ok(_)                => test.fail("a parser must not invent a date")
+
+    test.case("a literal that does not match reports the input's offset")
+    match strfmt.parse("15-03-2026", "%d/%m/%Y")
+        Err(BadFormat(at, _)) => test.assert(at == 2)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("the separators differ")
+
+@test
+fn test_directives_is_the_table_the_comment_claims() [io]
+    test.case("directives")
+    let ds = strfmt.directives()
+    test.assert(list.len(ds) > 0)
+
+    test.case("every entry is two characters starting with a percent")
+    for d in ds
+        test.assert(str.len(d) == 2)
+        test.assert(str.starts_with(d, "%"))
+
+    test.case("and the ones the doc comment names are in it")
+    test.assert(list.contains(ds, "%Y"))
+    test.assert(list.contains(ds, "%V"))
+    test.assert(list.contains(ds, "%%"))
+
+@test
+fn test_a_parse_error_points_at_a_byte() [io]
+    test.case("the offset is an index into the input")
+    match iso8601.parse_date("2026-XX-15")
+        Err(e) => test.assert(calerror.offset_of(e) == 5)
+        Ok(_)  => test.fail("XX is not a month")
+
+    test.case("a truncated input stops at its length")
+    match iso8601.parse_date("2026-03")
+        Err(Truncated(at)) => test.assert(at == 7)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("a year and a month is not a date")

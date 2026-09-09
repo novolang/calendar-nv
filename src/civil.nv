@@ -1,0 +1,420 @@
+// civil.nv — the types, and the questions a caller asks a date that do
+// not involve moving it.
+//
+// CIVIL TIME IS TIME WITHOUT A ZONE, and that is the whole subject of
+// this package.  `2026-03-15T09:00` is a civil date-time: it says what
+// a wall clock reads, and it does NOT say which wall.  Turning it into
+// an instant needs a zone, a zone needs a clock or a database, and both
+// of those are effects — so they are `chrono-nv`'s, and everything
+// here is arithmetic over integers a caller already holds.
+//
+// WHY THE TYPES ARE NAMED `Civil*`
+//
+// chrono calls them `NaiveDate`, `NaiveTime` and `NaiveDateTime`, and
+// the obvious ports would be `Date`, `Time` and `DateTime`.  `Date` is
+// not available: the standard library declares `struct Date` (and
+// `Duration`, and `Instant`), and a package that redeclares one is
+// refused with E2000 before it compiles a line.  So the family takes
+// the OTHER standard name for the same idea — civil time, as in
+// Howard Hinnant's algorithms and the C++ proposal that named them —
+// and it is used consistently rather than mixed with the two names
+// that happened to be free.
+//
+// THE CALENDAR IS PROLEPTIC GREGORIAN, without exception.  Year 1 is
+// year 1, year 0 exists, year -1 is 2 BC, and the Julian calendar is
+// not modelled anywhere.  This is chrono's rule and Python's, and it
+// is the only rule under which the difference between two dates is a
+// subtraction rather than a lookup.
+//
+// EVERY CONSTRUCTOR VALIDATES.  `date(2023, 2, 29)` is an `Err`, not a
+// March 1st, because a library that silently normalises turns a typo
+// into a wrong answer that nobody can find later.
+
+// A day on the proleptic Gregorian calendar, with no zone and no time.
+//
+// The fields are what the caller wrote and what a formatter prints;
+// the epoch-day form is the one arithmetic uses, and `epoch_day` is
+// how to get it.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.date(2026, 3, 15)
+//         Ok(d)  => println("${d.year}-${d.month}-${d.day}")
+//         Err(_) => println("not a date")
+// ```
+pub struct CivilDate
+    // The proleptic Gregorian year.  Negative years are astronomical:
+    // `0` is 1 BC and `-1` is 2 BC, which is what makes year
+    // arithmetic a subtraction.
+    year: Int
+    // `1 ..= 12`.
+    month: Int
+    // `1 ..= 31`, and no more than the month and year allow.
+    day: Int
+
+// A time of day, with no zone and no date.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.time_of(9, 30, 0, 0)
+//         Ok(t)  => println("${t.hour}:${t.minute}")
+//         Err(_) => println("not a time")
+// ```
+pub struct CivilTime
+    // `0 ..= 23`.  There is no 24:00; a caller who means the end of
+    // the day means midnight of the next one, and saying so is the
+    // caller's decision rather than this package's.
+    hour: Int
+    // `0 ..= 59`.
+    minute: Int
+    // `0 ..= 59`.  Never 60: see `CalError.TimeOutOfRange`.
+    second: Int
+    // `0 ..= 999_999_999`.  Nanoseconds and not a `Float`, because 52
+    // bits of mantissa resolves to about 0.2 µs around the present day
+    // and a timestamp that does not round-trip is not a timestamp.
+    nano: Int
+
+// A date and a time of day, with no zone.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     let d = civil.date(2026, 3, 15)!
+//     let t = civil.time_of(9, 30, 0, 0)!
+//     let dt = civil.datetime(d, t)
+//     println("${dt.date.day} at ${dt.time.hour}")
+// ```
+pub struct CivilDateTime
+    // The day.
+    date: CivilDate
+    // The time of day on it.
+    time: CivilTime
+
+// A day of the week.
+//
+// Monday first, because ISO 8601 numbers it 1 and because every week
+// calculation in this package is the ISO one.  `weekday_number` is
+// the conversion for a caller who needs the number; the standard
+// library's `Zoned.weekday()` answers 0 for Sunday, and the two are
+// deliberately not the same function.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.weekday_number(Wed)}")     // 3
+// ```
+pub enum Weekday
+    Mon
+    Tue
+    Wed
+    Thu
+    Fri
+    Sat
+    Sun
+
+// A month of the year, as a name rather than a number.
+//
+// It exists so that a `match` over months is exhaustive and a caller
+// cannot pass 13.  `month_number` and `month_of` cross between this
+// and the `month` field, which stays an `Int` because that is what a
+// parser produces and what a formatter prints.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.month_number(Feb)}")       // 2
+// ```
+pub enum Month
+    Jan
+    Feb
+    Mar
+    Apr
+    May
+    Jun
+    Jul
+    Aug
+    Sep
+    Oct
+    Nov
+    Dec
+
+// A date, or the reason those three numbers are not one.
+//
+// `DayOutOfRange` when the day is not in that month of that year —
+// including `2023-02-29`, which is why the year is in the variant —
+// and `MonthOutOfRange` when the month is not `1 ..= 12`.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.date(2023, 2, 29)
+//         Ok(_)  => println("2023 was not a leap year")
+//         Err(_) => println("refused")
+// ```
+pub fn date(y: Int, m: Int, d: Int) -> Result<CivilDate, CalError>
+    todo("calendar-nv.date")
+
+// A date from a year and a 1-based day of the year.
+//
+// chrono's `NaiveDate::from_yo_opt`.  `366` is a date in a leap year
+// and `OrdinalOutOfRange` in every other.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.date_ordinal(2026, 74)
+//         Ok(d)  => println("${d.month}-${d.day}")     // 3-15
+//         Err(_) => println("not a day of that year")
+// ```
+pub fn date_ordinal(y: Int, ordinal: Int) -> Result<CivilDate, CalError>
+    todo("calendar-nv.date_ordinal")
+
+// The date a signed count of days from 1970-01-01 names.
+//
+// Total: every `Int` is a date, negative ones before the epoch.  This
+// and `epoch_day` are the pair every other piece of date arithmetic in
+// this package is written in terms of — the conversion is Howard
+// Hinnant's `civil_from_days`, which is the same one the standard
+// library's `Zoned` uses, so the two agree by construction rather than
+// by testing.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     let d = civil.date_from_epoch_day(0)
+//     println("${d.year}-${d.month}-${d.day}")     // 1970-1-1
+// ```
+pub fn date_from_epoch_day(days: Int) -> CivilDate
+    todo("calendar-nv.date_from_epoch_day")
+
+// Days from 1970-01-01, negative before it.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.epoch_day(civil.date(1970, 1, 2)!)}")     // 1
+// ```
+pub fn epoch_day(d: CivilDate) -> Int
+    todo("calendar-nv.epoch_day")
+
+// A time of day, or the reason those four numbers are not one.
+//
+// Named `time_of` rather than `time` because `time` is a standard
+// library module and a call to `civil.time(…)` would read as one.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.time_of(23, 59, 60, 0)
+//         Ok(_)  => println("leap seconds are not CivilTime values")
+//         Err(_) => println("refused")
+// ```
+pub fn time_of(h: Int, minute: Int, s: Int, nano: Int) -> Result<CivilTime, CalError>
+    todo("calendar-nv.time_of")
+
+// Midnight: `00:00:00.000000000`.
+//
+// The time half of a date-time built from a bare date, and the value
+// `start_of_month` and friends pair a date with.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.midnight().hour}")         // 0
+// ```
+pub fn midnight() -> CivilTime
+    todo("calendar-nv.midnight")
+
+// A date and a time, together.
+//
+// Total, because both halves have already been validated: there is no
+// combination of a legal date and a legal time that is not a legal
+// date-time.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     let dt = civil.datetime(civil.date(2026, 3, 15)!, civil.midnight())
+//     println("${dt.date.year}")
+// ```
+pub fn datetime(d: CivilDate, t: CivilTime) -> CivilDateTime
+    todo("calendar-nv.datetime")
+
+// The day of the week this date falls on.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.weekday(civil.date(2026, 3, 15)!)
+//         Sun => println("a Sunday")
+//         _   => println("some other day")
+// ```
+pub fn weekday(d: CivilDate) -> Weekday
+    todo("calendar-nv.weekday")
+
+// The ISO 8601 number of a weekday: Monday is 1, Sunday is 7.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.weekday_number(Sun)}")     // 7
+// ```
+pub fn weekday_number(w: Weekday) -> Int
+    todo("calendar-nv.weekday_number")
+
+// This date's month, as a name.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.month_of(civil.date(2026, 3, 15)!)
+//         Mar => println("March")
+//         _   => println("not March")
+// ```
+pub fn month_of(d: CivilDate) -> Month
+    todo("calendar-nv.month_of")
+
+// The number of a month: January is 1, December is 12.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.month_number(Dec)}")       // 12
+// ```
+pub fn month_number(m: Month) -> Int
+    todo("calendar-nv.month_number")
+
+// The 1-based day of the year: 1 on the 1st of January, 365 or 366 on
+// the 31st of December.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.day_of_year(civil.date(2026, 3, 15)!)}")   // 74
+// ```
+pub fn day_of_year(d: CivilDate) -> Int
+    todo("calendar-nv.day_of_year")
+
+// Whether a year has 366 days, under the proleptic Gregorian rule:
+// divisible by 4, except centuries, except centuries divisible by 400.
+//
+// Proleptic means the rule is applied to years before it was adopted,
+// so `is_leap_year(1500)` is `false` — the Gregorian answer — and not
+// the Julian `true`.  Every date in this package is consistent with
+// that, which is the point of stating it.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.is_leap_year(2000)}")      // true
+//     println("${civil.is_leap_year(1900)}")      // false
+// ```
+pub fn is_leap_year(y: Int) -> Bool
+    todo("calendar-nv.is_leap_year")
+
+// How many days that month of that year has: 28, 29, 30 or 31, and `0`
+// for a month outside `1 ..= 12`.
+//
+// The `0` rather than a `Result`: this is the call a caller makes
+// INSIDE a loop over `1 ..= 12`, and threading an error through a
+// question they already know the answer to would be noise.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.days_in_month(2024, 2)}")  // 29
+// ```
+pub fn days_in_month(y: Int, m: Int) -> Int
+    todo("calendar-nv.days_in_month")
+
+// The ISO 8601 week-numbering year and week this date is in.
+//
+// NOT the calendar year: ISO weeks run Monday to Sunday and a week
+// belongs to the year that holds its Thursday, so 2027-01-01 is a
+// Friday in week 53 of 2026 and this returns `(2026, 53)`.  That
+// mismatch is the single most common bug in week-number code, which is
+// why both halves are returned together and there is no `iso_week`
+// that answers the week alone.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     let (y, w) = civil.iso_week(civil.date(2027, 1, 1)!)
+//     println("${y}-W${w}")                       // 2026-W53
+// ```
+pub fn iso_week(d: CivilDate) -> (Int, Int)
+    todo("calendar-nv.iso_week")
+
+// The date at an ISO 8601 week-numbering year, week and weekday.
+//
+// The inverse of `iso_week` plus `weekday`.  `WeekOutOfRange` when the
+// week is not `1 ..= 52`, or is 53 in a year that has only 52 — which
+// is most of them.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     match civil.from_iso_week(2026, 53, Fri)
+//         Ok(d)  => println("${d.year}-${d.month}-${d.day}")  // 2027-1-1
+//         Err(_) => println("no such week")
+// ```
+pub fn from_iso_week(year: Int, week: Int, w: Weekday) -> Result<CivilDate, CalError>
+    todo("calendar-nv.from_iso_week")
+
+// `-1`, `0` or `1` as `a` is before, the same as, or after `b`.
+//
+// An `Int` and not a `Bool` pair, so that a caller sorting a list has
+// the comparator the sort wants without writing it.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     let a = civil.date(2026, 3, 15)!
+//     let b = civil.date(2026, 4, 1)!
+//     println("${civil.compare_date(a, b)}")      // -1
+// ```
+pub fn compare_date(a: CivilDate, b: CivilDate) -> Int
+    todo("calendar-nv.compare_date")
+
+// `-1`, `0` or `1` as `a` is before, the same as, or after `b`.
+//
+// Comparing civil date-times compares wall-clock readings, which is
+// only a comparison of instants when both are read on the same wall.
+// That caveat is the reason this package has no `is_before`: a name
+// that short would invite a caller to forget it.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     let d = civil.date(2026, 3, 15)!
+//     let x = civil.datetime(d, civil.time_of(9, 0, 0, 0)!)
+//     let y = civil.datetime(d, civil.time_of(17, 0, 0, 0)!)
+//     println("${civil.compare_datetime(x, y)}")  // -1
+// ```
+pub fn compare_datetime(a: CivilDateTime, b: CivilDateTime) -> Int
+    todo("calendar-nv.compare_datetime")

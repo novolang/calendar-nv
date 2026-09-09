@@ -1,0 +1,36 @@
+[package]
+name        = "calendar-nv"
+version     = "0.0.1"
+description = "Civil dates, times and durations with no clock in them: proleptic Gregorian construction that validates, day and month arithmetic with the end-of-month rule written down, ISO 8601 and RFC 3339 in both directions, ISO week numbers, and a strftime-shaped formatter over a named subset."
+license     = "Apache-2.0"
+
+# An INTERFACE release: every `pub fn` body is a `todo()`, so the
+# signatures and the effect rows are published and nothing is
+# implemented.  `novo pkg publish` recognises the shape and requires
+# both the draft stability and the 0.0.x version; the first
+# implementation is the 0.1.0 published over it.
+stability   = "draft"
+
+# `core`, and this one is easy: there is no clock, no zone database and
+# no file anywhere in the package.  Every function is arithmetic over
+# integers the caller already holds.  The half that needs a machine —
+# `now`, the local offset, a monotonic reading — is `chrono-nv`, which
+# depends on this and declares its own effects.
+layer       = "core"
+
+category    = "time"
+
+tags        = ["date", "time", "calendar", "iso8601", "rfc3339", "duration", "chrono"]
+repository  = "https://github.com/novolang/calendar-nv"
+maintainers = ["novo-lang"]
+
+# A library: no `main`, so `novo pkg build` type-checks and
+# effect-checks every module under `src/` and writes no binary.
+
+[docs.pages]
+"README.md" = "Dates and durations without a clock"
+
+[dependencies]
+# None.  The day-number conversions are Howard Hinnant's, transcribed;
+# the parsers are hand-written scans; and a package that needed a
+# dependency to add two dates would be the wrong package.

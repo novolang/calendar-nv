@@ -1,0 +1,237 @@
+// civil_tests.nv — the API suite for the types and the questions that
+// do not move a date.
+//
+// RED ON PURPOSE.  Every body in this package is a `todo()`, so every
+// assertion reaches `not implemented: calendar-nv.<fn>` and the suite
+// fails; `novo test tests/civil_tests.nv --isolate` gives every `@test`
+// its own process and names the function each one stopped at.  What
+// these files are worth today is that they COMPILE against the
+// signatures — the claim under review — and that the day a body lands
+// they say whether it agrees with what was promised.
+
+use std.test
+use civil
+use calerror
+
+// Fixture builders.  `civil.date(…)!` on every line would put a
+// propagation `!` in almost every assertion in this package's suites;
+// one helper each keeps the cases about the answer rather than about
+// unwrapping a value that is a constant.
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    civil.date(y, m, d)!
+
+fn clock(h: Int, mi: Int, s: Int, n: Int) -> CivilTime
+    civil.time_of(h, mi, s, n)!
+
+@test
+fn test_a_date_is_three_numbers_that_have_to_agree() [io]
+    test.case("an ordinary date")
+    match civil.date(2026, 3, 15)
+        Ok(d)  =>
+            test.assert(d.year == 2026)
+            test.assert(d.month == 3)
+            test.assert(d.day == 15)
+        Err(_) => test.fail("2026-03-15 is a date")
+
+    test.case("29 February in a common year is refused")
+    match civil.date(2023, 2, 29)
+        Err(DayOutOfRange(y, m, d)) =>
+            test.assert(y == 2023)
+            test.assert(m == 2)
+            test.assert(d == 29)
+        Err(_)                      => test.fail("wrong reason")
+        Ok(_)                       => test.fail("2023 was not a leap year")
+
+    test.case("29 February in a leap year is a date")
+    match civil.date(2024, 2, 29)
+        Ok(d)  => test.assert(d.day == 29)
+        Err(_) => test.fail("2024 was a leap year")
+
+    test.case("month 13 is refused, and says so")
+    match civil.date(2026, 13, 1)
+        Err(MonthOutOfRange(m)) => test.assert(m == 13)
+        Err(_)                  => test.fail("wrong reason")
+        Ok(_)                   => test.fail("there is no thirteenth month")
+
+    test.case("a range error is not about a piece of text")
+    match civil.date(2026, 13, 1)
+        Err(e) => test.assert(calerror.offset_of(e) == -1)
+        Ok(_)  => test.fail("there is no thirteenth month")
+
+@test
+fn test_a_time_is_four_numbers_and_never_a_leap_second() [io]
+    test.case("an ordinary time")
+    match civil.time_of(9, 30, 0, 0)
+        Ok(t)  =>
+            test.assert(t.hour == 9)
+            test.assert(t.minute == 30)
+            test.assert(t.nano == 0)
+        Err(_) => test.fail("09:30 is a time")
+
+    test.case("second 60 is refused — it belongs to the parser")
+    match civil.time_of(23, 59, 60, 0)
+        Err(TimeOutOfRange(_, _, s, _)) => test.assert(s == 60)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("no CivilTime has a 60th second")
+
+    test.case("hour 24 is refused — midnight is the next day")
+    match civil.time_of(24, 0, 0, 0)
+        Err(TimeOutOfRange(h, _, _, _)) => test.assert(h == 24)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("there is no 24:00")
+
+    test.case("a nanosecond past the ninth digit is refused")
+    match civil.time_of(9, 30, 0, 1000000000)
+        Err(TimeOutOfRange(_, _, _, n)) => test.assert(n == 1000000000)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("a second has 10^9 nanoseconds")
+
+    test.case("midnight")
+    let m = civil.midnight()
+    test.assert(m.hour == 0)
+    test.assert(m.second == 0)
+    test.assert(m.nano == 0)
+
+@test
+fn test_datetime_pairs_two_values_that_are_already_legal() [io]
+    test.case("datetime")
+    let dt = civil.datetime(day(2026, 3, 15), clock(9, 30, 0, 0))
+    test.assert(dt.date.month == 3)
+    test.assert(dt.time.hour == 9)
+
+@test
+fn test_the_epoch_day_is_the_representation_arithmetic_uses() [io]
+    test.case("the epoch itself is day zero")
+    test.assert(civil.epoch_day(day(1970, 1, 1)) == 0)
+    test.assert(civil.epoch_day(day(1970, 1, 2)) == 1)
+
+    test.case("before the epoch is negative")
+    test.assert(civil.epoch_day(day(1969, 12, 31)) == -1)
+
+    test.case("date_from_epoch_day is the inverse")
+    let d = civil.date_from_epoch_day(0)
+    test.assert(d.year == 1970)
+    test.assert(d.month == 1)
+    test.assert(d.day == 1)
+
+    test.case("and it is total — every Int is a date")
+    let old = civil.date_from_epoch_day(-1000000)
+    test.assert(old.year < 1970)
+
+@test
+fn test_the_calendar_is_proleptic_gregorian() [io]
+    test.case("the century rule")
+    test.assert(civil.is_leap_year(2000))
+    test.assert(civil.is_leap_year(1900) == false)
+    test.assert(civil.is_leap_year(2024))
+    test.assert(civil.is_leap_year(2023) == false)
+
+    test.case("proleptic: 1500 is Gregorian-false, not Julian-true")
+    test.assert(civil.is_leap_year(1500) == false)
+
+    test.case("year zero exists and is a leap year")
+    test.assert(civil.is_leap_year(0))
+
+@test
+fn test_days_in_month_answers_zero_outside_the_year() [io]
+    test.case("the four lengths")
+    test.assert(civil.days_in_month(2026, 1) == 31)
+    test.assert(civil.days_in_month(2026, 2) == 28)
+    test.assert(civil.days_in_month(2024, 2) == 29)
+    test.assert(civil.days_in_month(2026, 4) == 30)
+
+    test.case("a month that is not one is 0, not an error")
+    test.assert(civil.days_in_month(2026, 0) == 0)
+    test.assert(civil.days_in_month(2026, 13) == 0)
+
+@test
+fn test_the_ordinal_day_in_both_directions() [io]
+    test.case("day_of_year")
+    test.assert(civil.day_of_year(day(2026, 1, 1)) == 1)
+    test.assert(civil.day_of_year(day(2026, 3, 15)) == 74)
+    test.assert(civil.day_of_year(day(2026, 12, 31)) == 365)
+    test.assert(civil.day_of_year(day(2024, 12, 31)) == 366)
+
+    test.case("date_ordinal is the inverse")
+    match civil.date_ordinal(2026, 74)
+        Ok(d)  =>
+            test.assert(d.month == 3)
+            test.assert(d.day == 15)
+        Err(_) => test.fail("74 is a day of 2026")
+
+    test.case("366 is refused in a common year")
+    match civil.date_ordinal(2026, 366)
+        Err(OrdinalOutOfRange(y, o)) =>
+            test.assert(y == 2026)
+            test.assert(o == 366)
+        Err(_)                       => test.fail("wrong reason")
+        Ok(_)                        => test.fail("2026 has 365 days")
+
+@test
+fn test_the_weekday_and_the_month_as_names() [io]
+    test.case("weekday")
+    match civil.weekday(day(2026, 3, 15))
+        Sun => test.assert(true)
+        _   => test.fail("2026-03-15 is a Sunday")
+
+    test.case("weekday_number is ISO — Monday is 1")
+    test.assert(civil.weekday_number(Mon) == 1)
+    test.assert(civil.weekday_number(Sun) == 7)
+
+    test.case("month_of")
+    match civil.month_of(day(2026, 3, 15))
+        Mar => test.assert(true)
+        _   => test.fail("month 3 is March")
+
+    test.case("month_number")
+    test.assert(civil.month_number(Jan) == 1)
+    test.assert(civil.month_number(Dec) == 12)
+
+@test
+fn test_iso_weeks_belong_to_the_year_that_holds_their_thursday() [io]
+    test.case("the case every week-number bug is about")
+    let (y, w) = civil.iso_week(day(2027, 1, 1))
+    test.assert(y == 2026)
+    test.assert(w == 53)
+
+    test.case("an ordinary week is in its own year")
+    let (y2, w2) = civil.iso_week(day(2026, 3, 15))
+    test.assert(y2 == 2026)
+    test.assert(w2 == 11)
+
+    test.case("from_iso_week is the inverse")
+    match civil.from_iso_week(2026, 53, Fri)
+        Ok(d)  =>
+            test.assert(d.year == 2027)
+            test.assert(d.month == 1)
+            test.assert(d.day == 1)
+        Err(_) => test.fail("2026 has a week 53")
+
+    test.case("a week the year does not have is refused")
+    match civil.from_iso_week(2025, 53, Mon)
+        Err(WeekOutOfRange(y3, w3)) =>
+            test.assert(y3 == 2025)
+            test.assert(w3 == 53)
+        Err(_)                      => test.fail("wrong reason")
+        Ok(_)                       => test.fail("2025 has 52 ISO weeks")
+
+@test
+fn test_comparison_is_a_three_way_int() [io]
+    let a = day(2026, 3, 15)
+    let b = day(2026, 4, 1)
+
+    test.case("compare_date")
+    test.assert(civil.compare_date(a, b) == -1)
+    test.assert(civil.compare_date(b, a) == 1)
+    test.assert(civil.compare_date(a, a) == 0)
+
+    test.case("compare_datetime orders the time within a day")
+    let morning = civil.datetime(a, clock(9, 0, 0, 0))
+    let evening = civil.datetime(a, clock(17, 0, 0, 0))
+    test.assert(civil.compare_datetime(morning, evening) == -1)
+    test.assert(civil.compare_datetime(morning, morning) == 0)
+
+    test.case("and the nanosecond is part of the order")
+    let t0 = civil.datetime(a, clock(9, 0, 0, 0))
+    let t1 = civil.datetime(a, clock(9, 0, 0, 1))
+    test.assert(civil.compare_datetime(t0, t1) == -1)

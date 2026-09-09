@@ -1,0 +1,234 @@
+// span.nv — a signed length of time, exact to the nanosecond.
+//
+// WHY IT IS NOT CALLED `Duration`
+//
+// Because it cannot be: the standard library declares `struct
+// Duration` and redeclaring it is E2000.  `TimeDelta` is chrono's own
+// current name for the same type — `chrono::Duration` was renamed to
+// `chrono::TimeDelta` for exactly the collision reason, with the old
+// name kept as an alias — so the port takes the newer name and reads
+// as a port rather than as a workaround.
+//
+// It is also a DIFFERENT type from `std.time.Duration`, and the
+// difference is worth knowing before reaching for either: the standard
+// library's is microseconds in an `Int` and is what a monotonic clock
+// hands you; this one is whole seconds plus a nanosecond field, is
+// signed, and is what you get when you subtract one civil date-time
+// from another.  `chrono-nv` is where the two meet, because that is
+// where a clock is.
+//
+// WHY SECONDS PLUS NANOS AND NOT ONE NUMBER
+//
+// One `Int` of nanoseconds overflows at about 292 years, which is
+// inside the range a calendar library is asked about — "how long
+// between 1800 and today" is an ordinary question.  One `Float` of
+// seconds loses the nanosecond around the present day.  Two fields
+// cost one comparison in the arithmetic and answer both.
+//
+// THE INVARIANT the constructors keep and every operation preserves:
+// `nanos` is in `0 ..= 999_999_999`, and the sign lives entirely in
+// `secs`.  So `-0.5s` is `secs = -1, nanos = 500_000_000` — the same
+// normalisation Rust's `TimeDelta` and Go's `time.Duration` arithmetic
+// produce, and the reason `as_seconds` truncates toward negative
+// infinity rather than toward zero.
+
+// A signed length of time, exact to the nanosecond.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     let d = span.hours(2)
+//     println("${span.as_seconds(d)}")            // 7200
+// ```
+pub struct TimeDelta
+    // Whole seconds, signed.  The sign of the whole value.
+    secs: Int
+    // `0 ..= 999_999_999`, always non-negative — see the module note
+    // on the invariant.
+    nanos: Int
+
+// A length in nanoseconds.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.nanoseconds(1500000000).secs}")     // 1
+// ```
+pub fn nanoseconds(n: Int) -> TimeDelta
+    todo("calendar-nv.nanoseconds")
+
+// A length in milliseconds.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.milliseconds(1500).secs}")          // 1
+// ```
+pub fn milliseconds(n: Int) -> TimeDelta
+    todo("calendar-nv.milliseconds")
+
+// A length in seconds.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.seconds(90).secs}")                 // 90
+// ```
+pub fn seconds(n: Int) -> TimeDelta
+    todo("calendar-nv.seconds")
+
+// A length in minutes.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.as_seconds(span.minutes(90))}")     // 5400
+// ```
+pub fn minutes(n: Int) -> TimeDelta
+    todo("calendar-nv.minutes")
+
+// A length in hours.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.as_seconds(span.hours(1))}")        // 3600
+// ```
+pub fn hours(n: Int) -> TimeDelta
+    todo("calendar-nv.hours")
+
+// A length in days, where a day is exactly 86,400 seconds.
+//
+// That is the ONLY reading available to a package with no zone in it,
+// and it is worth saying because it is not the reading a calendar user
+// always wants: across a daylight-saving boundary a civil day is 23 or
+// 25 hours, and this package cannot know where the boundaries are.  A
+// caller who means "the same clock time tomorrow" wants
+// `arith.add_days`, which moves the date and leaves the time alone.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.as_seconds(span.days(1))}")         // 86400
+// ```
+pub fn days(n: Int) -> TimeDelta
+    todo("calendar-nv.days")
+
+// Whole seconds, truncated toward negative infinity.
+//
+// So `as_seconds(milliseconds(-1500))` is `-2`, not `-1`: the value is
+// `secs = -2, nanos = 500_000_000` and this returns the field.  Toward
+// negative infinity and not toward zero because that is what keeps
+// `as_seconds` a projection of the representation rather than a second
+// rounding rule to remember.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.as_seconds(span.milliseconds(-1500))}")   // -2
+// ```
+pub fn as_seconds(d: TimeDelta) -> Int
+    todo("calendar-nv.as_seconds")
+
+// The nanosecond part, `0 ..= 999_999_999`.
+//
+// Always non-negative, whatever the sign of the value — the pair
+// `(as_seconds, subsec_nanos)` is the representation, and reassembling
+// it is `seconds(s) + nanoseconds(n)`.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.subsec_nanos(span.milliseconds(-1500))}")  // 500000000
+// ```
+pub fn subsec_nanos(d: TimeDelta) -> Int
+    todo("calendar-nv.subsec_nanos")
+
+// The sum.
+//
+// `Overflow` when the seconds do not fit an `Int`, which for a length
+// built from a calendar difference means the two dates were about 292
+// billion years apart.  It is a `Result` anyway, because a total
+// function that silently wraps is worse than one that says so.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     match span.add(span.hours(1), span.minutes(30))
+//         Ok(d)  => println("${span.as_seconds(d)}")      // 5400
+//         Err(_) => println("overflow")
+// ```
+pub fn add(a: TimeDelta, b: TimeDelta) -> Result<TimeDelta, CalError>
+    todo("calendar-nv.add")
+
+// The difference, `a - b`.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     match span.sub(span.hours(1), span.minutes(90))
+//         Ok(d)  => println("${span.as_seconds(d)}")      // -1800
+//         Err(_) => println("overflow")
+// ```
+pub fn sub(a: TimeDelta, b: TimeDelta) -> Result<TimeDelta, CalError>
+    todo("calendar-nv.sub")
+
+// The same length with the opposite sign.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     match span.negate(span.hours(1))
+//         Ok(d)  => println("${span.as_seconds(d)}")      // -3600
+//         Err(_) => println("overflow")
+// ```
+pub fn negate(d: TimeDelta) -> Result<TimeDelta, CalError>
+    todo("calendar-nv.negate")
+
+// The magnitude: the same length, never negative.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     match span.magnitude(span.minutes(-30))
+//         Ok(d)  => println("${span.as_seconds(d)}")      // 1800
+//         Err(_) => println("overflow")
+// ```
+pub fn magnitude(d: TimeDelta) -> Result<TimeDelta, CalError>
+    todo("calendar-nv.magnitude")
+
+// Whether the length is less than zero.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.is_negative(span.seconds(-1))}")    // true
+// ```
+pub fn is_negative(d: TimeDelta) -> Bool
+    todo("calendar-nv.is_negative")
+
+// `-1`, `0` or `1` as `a` is shorter than, equal to, or longer than
+// `b`.  Signed, so `-1 hour` compares less than `1 second`.
+//
+// ```novo
+// use span
+//
+// fn main() [io]
+//     println("${span.compare(span.hours(-1), span.seconds(1))}")  // -1
+// ```
+pub fn compare(a: TimeDelta, b: TimeDelta) -> Int
+    todo("calendar-nv.compare")

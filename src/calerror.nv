@@ -1,0 +1,115 @@
+// calerror.nv — the two ways a calendar refuses: the value does not
+// exist, or the text does not say what it claims to.
+//
+// WHY THERE IS AN ERROR TYPE AT ALL
+//
+// `2023-02-29` is not a date.  A library that answers it — by rolling
+// to March 1, by clamping to the 28th, by returning the 29th of a
+// month that has 28 days — has decided something on the caller's
+// behalf that the caller did not ask it to decide, and the decision
+// surfaces months later in somebody's billing run.  So construction
+// validates, and the reason it refuses names the numbers it saw.
+//
+// The parse half is the same argument one layer up: an ISO 8601 string
+// is either a date or it is text, and a caller who is reading a file
+// somebody else produced needs the OFFSET of the byte that stopped the
+// parse, not the word "invalid".  Offsets here are 0-based indices into
+// the input string, because that is what a caller slices with.
+//
+// WHAT IS NOT AN ERROR
+//
+// A date before 1583 is not an error, and neither is a negative year.
+// This package is proleptic Gregorian all the way down, like chrono's
+// `NaiveDate` and like Python's `datetime.date`: the calendar rules are
+// applied backwards past the point history adopted them, because the
+// alternative is arithmetic that changes shape in the middle and a
+// difference between two dates that nobody can compute.
+
+// Why a calendar value could not be built, or a string could not be
+// read.
+//
+// The range variants carry the numbers that were out of range, so a
+// message can quote them without the caller having to.
+//
+// ```novo
+// use calerror
+//
+// fn main() [io]
+//     let e = DayOutOfRange(2023, 2, 29)
+//     println("${calerror.offset_of(e)}")      // -1 — not about text
+// ```
+pub enum CalError
+    // The day is not in that month of that year.  `2023-02-29` and
+    // `2026-04-31` both land here; the year is carried because
+    // February's answer depends on it.
+    DayOutOfRange(y: Int, m: Int, d: Int)
+    // The month is not in `1 ..= 12`.
+    MonthOutOfRange(m: Int)
+    // A clock field is out of range: the hour outside `0 ..= 23`, the
+    // minute or second outside `0 ..= 59`, the nanosecond outside
+    // `0 ..= 999_999_999`.  All four are carried because a caller that
+    // built them from parsed text wants to see the set it produced.
+    //
+    // There is no leap second here.  A `CivilTime` second of 60 is
+    // refused, and RFC 3339's `:60` is handled where it belongs, in the
+    // parser, which is the only place the calendar has enough context
+    // to say what the value should become.
+    TimeOutOfRange(h: Int, minute: Int, s: Int, nano: Int)
+    // The ordinal day is not in `1 ..= 365` — or `366` in a leap year.
+    OrdinalOutOfRange(y: Int, ordinal: Int)
+    // The ISO 8601 week number is not in `1 ..= 52`, or is `53` in a
+    // year that has only 52.
+    WeekOutOfRange(y: Int, week: Int)
+    // The input is not the shape the format asked for.  `at` is the
+    // 0-based byte offset where the parser gave up and `why` names
+    // what it wanted there.
+    BadFormat(at: Int, why: Str)
+    // The input ended while the parser still needed bytes.  `at` is the
+    // length of the input, which is where it stopped.
+    Truncated(at: Int)
+    // The input was a complete value followed by something else.  `at`
+    // is the offset of the first byte that was not consumed — a
+    // separate reason from `BadFormat` because "your string has a
+    // trailing newline" and "your string is not a date" are different
+    // problems.
+    TrailingText(at: Int)
+    // A format string named a directive this package does not
+    // implement.  `at` is the offset of the `%`; `directive` is the
+    // two characters as written, so the message can show them.
+    UnknownDirective(at: Int, directive: Str)
+    // The arithmetic left the range this package represents: a year
+    // outside `-999_999_999 ..= 999_999_999`, or a `TimeDelta` whose
+    // seconds do not fit an `Int`.  `why` says which.
+    Overflow(why: Str)
+
+// The one-line message, for a caller who is printing rather than
+// matching.
+//
+// It quotes the numbers or names the offset, whichever the variant
+// carries, so that a program can print this and nothing else and still
+// have told somebody enough to fix their file.
+//
+// `Result<T, CalError>` requires it (SPEC § 3.4), so the impl exists
+// whether or not an interface release has anything to say yet.
+impl Error for CalError
+    // Panics with `not implemented` until the bodies land.
+    fn message(self) -> Str
+        todo("calendar-nv.CalError.message")
+
+// The 0-based byte offset in the input this error is about, or `-1`
+// when it is not about a piece of text.
+//
+// The five range variants answer `-1`: they are about numbers a caller
+// passed in, and there is no string to point at.  The four parse
+// variants answer a real offset, which is what lets a caller print the
+// input with a caret under the byte that stopped it.
+//
+// ```novo
+// use calerror
+//
+// fn main() [io]
+//     println("${calerror.offset_of(Truncated(7))}")        // 7
+//     println("${calerror.offset_of(MonthOutOfRange(13))}")  // -1
+// ```
+pub fn offset_of(e: CalError) -> Int
+    todo("calendar-nv.offset_of")

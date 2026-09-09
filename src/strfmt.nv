@@ -1,0 +1,106 @@
+// strfmt.nv — a `strftime`-shaped formatter, over a named subset.
+//
+// THE SUBSET, AND WHY IT IS WRITTEN DOWN
+//
+// `strftime` is a C interface whose directive set depends on the
+// platform, the locale and the phase of the moon.  A port that said
+// "strftime-compatible" would be making a promise nobody can check.
+// So this module implements exactly the directives below, in one
+// locale — the invariant one, English, ASCII — and every other `%x`
+// is `UnknownDirective` with the two characters and their offset.
+//
+//   %Y  year, at least four digits, `-` for negative
+//   %y  year modulo 100, two digits
+//   %m  month, 01-12          %d  day of month, 01-31
+//   %e  day of month, space-padded, ` 1`-31
+//   %j  day of year, 001-366
+//   %H  hour, 00-23           %I  hour, 01-12
+//   %M  minute, 00-59         %S  second, 00-59
+//   %f  nanoseconds, nine digits
+//   %p  `AM` or `PM`          %P  `am` or `pm`
+//   %A  weekday name          %a  weekday, three letters
+//   %B  month name            %b  month, three letters
+//   %u  ISO weekday, 1-7      %G  ISO week-numbering year
+//   %V  ISO week, 01-53
+//   %F  `%Y-%m-%d`            %T  `%H:%M:%S`
+//   %%  a literal `%`
+//
+// NOT HERE, on purpose: `%Z` and `%z`, which are a zone and a zone is
+// `chrono-nv`'s; `%s`, the Unix timestamp, which needs an epoch and
+// therefore a zone; `%c`, `%x` and `%X`, which are locale-defined and
+// this package has one locale; and `%U`/`%W`, the two non-ISO week
+// numberings, which exist mostly to be confused with `%V`.
+//
+// WHY IT IS NOT THE ONLY FORMATTER.  `iso8601` is the one to reach for
+// when the output is going to another program: it is a fixed grammar
+// with a round-trip guarantee.  This one is for output a person reads,
+// where the caller picks the shape.
+//
+// `parse` IS THE SAME TABLE READ BACKWARDS, and it is narrower than
+// `format` by necessity: `%A` and `%B` are accepted and checked for
+// consistency but contribute nothing a date can be built from, and a
+// format string that does not determine a date — no year, or no day —
+// is `BadFormat` before any input is read.
+
+use civil
+
+// The date-time rendered through a format string.
+//
+// `UnknownDirective` for a `%x` outside the table at the top of this
+// module, and `BadFormat` for a `%` at the end of the string.  Any
+// other byte is copied through.
+//
+// ```novo
+// use strfmt
+// use civil
+//
+// fn main() [io]
+//     let dt = civil.datetime(civil.date(2026, 3, 15)!,
+//                             civil.time_of(9, 30, 0, 0)!)
+//     match strfmt.format(dt, "%A, %e %B %Y at %I:%M %p")
+//         Ok(s)  => println(s)     // Sunday, 15 March 2026 at 09:30 AM
+//         Err(_) => println("bad format")
+// ```
+pub fn format(dt: CivilDateTime, fmt: Str) -> Result<Str, CalError>
+    todo("calendar-nv.format")
+
+// A date-time read back out of a string that has the given shape.
+//
+// The format string is the same table; literal bytes in it must match
+// the input exactly, and `%` directives consume what they would have
+// produced.  `BadFormat` when the input diverges, with the offset in
+// the INPUT — which is the string the caller is trying to fix.
+//
+// A format that cannot determine a date is refused before the input is
+// looked at: `"%H:%M"` names no day, and a parser that filled in a
+// default would be inventing one.  Missing TIME fields default to
+// midnight, because a date with no time in it is an ordinary thing to
+// write and a day is a real value.
+//
+// ```novo
+// use strfmt
+//
+// fn main() [io]
+//     match strfmt.parse("15/03/2026", "%d/%m/%Y")
+//         Ok(dt) => println("${dt.date.year}")            // 2026
+//         Err(_) => println("did not match")
+// ```
+pub fn parse(s: Str, fmt: Str) -> Result<CivilDateTime, CalError>
+    todo("calendar-nv.parse")
+
+// Every directive this module implements, as two-character strings —
+// `["%Y", "%y", "%m", …]` — in the order of the table above.
+//
+// It exists so that a program taking a format string from a user can
+// tell them what is available without this file being the only place
+// the list is written down, and so that a test can assert the two
+// halves agree rather than trusting the comment.
+//
+// ```novo
+// use strfmt
+//
+// fn main() [io]
+//     println("${list.len(strfmt.directives())}")
+// ```
+pub fn directives() -> [Str]
+    todo("calendar-nv.directives")

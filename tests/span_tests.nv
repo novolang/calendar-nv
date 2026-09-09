@@ -1,0 +1,104 @@
+// span_tests.nv — the API suite for `TimeDelta`.
+//
+// RED ON PURPOSE: every body is a `todo()`.  Run with `--isolate` for
+// one verdict per `@test`.
+//
+// The invariant most of these cases are about: `nanos` is always in
+// `0 ..= 999_999_999` and the sign lives entirely in `secs`, so
+// `-1.5s` is `(-2, 500_000_000)`.  It is the reason `as_seconds`
+// truncates toward negative infinity, and getting it wrong is the
+// classic off-by-one in a signed duration type.
+
+use std.test
+use span
+
+@test
+fn test_the_constructors_scale_to_the_same_unit() [io]
+    test.case("seconds")
+    test.assert(span.seconds(90).secs == 90)
+
+    test.case("minutes and hours")
+    test.assert(span.as_seconds(span.minutes(90)) == 5400)
+    test.assert(span.as_seconds(span.hours(1)) == 3600)
+
+    test.case("a day is exactly 86,400 seconds — this package has no zone")
+    test.assert(span.as_seconds(span.days(1)) == 86400)
+
+    test.case("milliseconds and nanoseconds carry into the seconds field")
+    test.assert(span.milliseconds(1500).secs == 1)
+    test.assert(span.subsec_nanos(span.milliseconds(1500)) == 500000000)
+    test.assert(span.nanoseconds(1500000000).secs == 1)
+
+@test
+fn test_the_sign_lives_in_the_seconds_field() [io]
+    test.case("a negative sub-second value borrows")
+    let d = span.milliseconds(-1500)
+    test.assert(span.as_seconds(d) == -2)
+    test.assert(span.subsec_nanos(d) == 500000000)
+
+    test.case("the nanosecond field is never negative")
+    test.assert(span.subsec_nanos(span.nanoseconds(-1)) >= 0)
+
+    test.case("is_negative reads the whole value, not the field")
+    test.assert(span.is_negative(span.nanoseconds(-1)))
+    test.assert(span.is_negative(span.seconds(0)) == false)
+    test.assert(span.is_negative(span.seconds(1)) == false)
+
+@test
+fn test_addition_and_subtraction() [io]
+    test.case("add")
+    match span.add(span.hours(1), span.minutes(30))
+        Ok(d)  => test.assert(span.as_seconds(d) == 5400)
+        Err(_) => test.fail("an hour and a half fits in an Int")
+
+    test.case("sub can go negative")
+    match span.sub(span.hours(1), span.minutes(90))
+        Ok(d)  =>
+            test.assert(span.as_seconds(d) == -1800)
+            test.assert(span.is_negative(d))
+        Err(_) => test.fail("half an hour fits in an Int")
+
+    test.case("the nanosecond parts carry")
+    match span.add(span.milliseconds(600), span.milliseconds(600))
+        Ok(d)  =>
+            test.assert(span.as_seconds(d) == 1)
+            test.assert(span.subsec_nanos(d) == 200000000)
+        Err(_) => test.fail("1.2 seconds fits in an Int")
+
+@test
+fn test_negate_and_magnitude() [io]
+    test.case("negate")
+    match span.negate(span.hours(1))
+        Ok(d)  => test.assert(span.as_seconds(d) == -3600)
+        Err(_) => test.fail("an hour fits in an Int")
+
+    test.case("negate is its own inverse")
+    match span.negate(span.negate(span.minutes(7))!)
+        Ok(d)  => test.assert(span.as_seconds(d) == 420)
+        Err(_) => test.fail("seven minutes fits in an Int")
+
+    test.case("magnitude is never negative")
+    match span.magnitude(span.minutes(-30))
+        Ok(d)  =>
+            test.assert(span.as_seconds(d) == 1800)
+            test.assert(span.is_negative(d) == false)
+        Err(_) => test.fail("half an hour fits in an Int")
+
+    test.case("magnitude of a positive length leaves it alone")
+    match span.magnitude(span.minutes(30))
+        Ok(d)  => test.assert(span.as_seconds(d) == 1800)
+        Err(_) => test.fail("half an hour fits in an Int")
+
+@test
+fn test_compare_is_signed_and_three_way() [io]
+    test.case("a negative hour is shorter than a positive second")
+    test.assert(span.compare(span.hours(-1), span.seconds(1)) == -1)
+
+    test.case("and the other way round")
+    test.assert(span.compare(span.seconds(1), span.hours(-1)) == 1)
+
+    test.case("equal is zero, whichever spelling built it")
+    test.assert(span.compare(span.minutes(1), span.seconds(60)) == 0)
+
+    test.case("the nanosecond part is part of the order")
+    test.assert(span.compare(span.nanoseconds(1), span.nanoseconds(2)) == -1)
