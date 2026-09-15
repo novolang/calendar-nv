@@ -1,6 +1,6 @@
 [package]
 name        = "calendar-nv"
-version     = "0.0.2"
+version     = "0.0.3"
 description = "Civil dates, times and durations with no clock in them: proleptic Gregorian construction that validates, day and month arithmetic with the end-of-month rule written down, ISO 8601 and RFC 3339 in both directions, ISO week numbers, and a strftime-shaped formatter over a named subset."
 license     = "Apache-2.0"
 
