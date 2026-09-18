@@ -1,21 +1,22 @@
 // span_edges_tests.nv — the ends of `TimeDelta`, where the answers
 // stop being obvious.
 //
-// Three things are checked here and nowhere else: the normalisation of
-// a negative sub-second value, which is the classic off-by-one in a
-// signed duration type; the four places the seconds field can leave
-// the range of an `Int`, each of which answers `Overflow` rather than
-// wrapping or trapping; and the borrow in `sub`, which is the same
-// arithmetic as the carry in `add` read the other way.
+// Three things are checked here and nowhere else.  The first is the
+// normalisation of a negative sub-second value, which is the common
+// off-by-one in a signed length of time.  The second is the four places
+// the seconds field can leave the range of an `Int`, each of which
+// answers `Overflow` rather than wrapping or trapping.  The third is
+// the borrow in `sub`, which is the same arithmetic as the carry in
+// `add` read the other way.
 
 use std.test
 use span
 
 // The largest and the most negative lengths this type can hold.  They
-// are written as a construction rather than as a literal because the
-// most negative one has no literal: its magnitude is one above the
-// largest `Int` and the minus in front of a number is a prefix
-// operator, not part of the number.
+// are written as a construction rather than as a literal, because the
+// most negative one has no literal.  Its magnitude is one above the
+// largest `Int`, and the minus in front of a number is a prefix
+// operator rather than part of the number.
 fn longest() -> TimeDelta
     span.seconds(9223372036854775807)
 

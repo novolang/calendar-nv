@@ -1,21 +1,16 @@
-// civil_tests.nv — the API suite for the types and the questions that
-// do not move a date.
+// civil_tests.nv — the suite for the types and the questions that do
+// not move a date.
 //
-// RED ON PURPOSE.  Every body in this package is a `todo()`, so every
-// assertion reaches `not implemented: calendar-nv.<fn>` and the suite
-// fails; `novo test tests/civil_tests.nv --isolate` gives every `@test`
-// its own process and names the function each one stopped at.  What
-// these files are worth today is that they COMPILE against the
-// signatures — the claim under review — and that the day a body lands
-// they say whether it agrees with what was promised.
+// `novo test tests/civil_tests.nv --isolate` gives every `@test` its
+// own process and names the function each one stopped at.
 
 use std.test
 use civil
 use calerror
 
 // Fixture builders.  `civil.date(…)!` on every line would put a
-// propagation `!` in almost every assertion in this package's suites;
-// one helper each keeps the cases about the answer rather than about
+// propagation `!` in almost every assertion in this package's suites.
+// One helper each keeps a case about the answer rather than about
 // unwrapping a value that is a constant.
 fn day(y: Int, m: Int, d: Int) -> CivilDate
     civil.date(y, m, d)!

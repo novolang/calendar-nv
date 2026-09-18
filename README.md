@@ -14,15 +14,6 @@ the registry are built on it:
 [humantime-nv](https://novo-lang.org/packages/humantime-nv) and
 [ntp-nv](https://novo-lang.org/packages/ntp-nv).
 
-## Status
-
-Every function in this package has a body, and the test suites pass.
-This is version 0.1.0, the first working release, and its stability is
-`experimental`: the signatures are the ones published as an interface
-at 0.0.1 and may still change while the packages built on this one are
-written. What the package does not do is listed under
-[What is not included](#what-is-not-included).
-
 ## What it is
 
 A **civil date** is a year, a month and a day. A **civil time** is an
@@ -84,7 +75,7 @@ These are the ranges every value in the package is checked against.
 novo pkg add calendar-nv
 ```
 
-This release needs a novo-lang toolchain of 0.9.1 or newer.
+calendar-nv needs a novo-lang toolchain of 0.9.1 or newer.
 
 ## Example
 
@@ -215,8 +206,8 @@ and clamp the day.
     caller moving a date inside a loop can avoid it: `civil.epoch_day`,
     `civil.date_from_epoch_day`, `arith.days_between`,
     `civil.compare_date` and every constructor in `span` answer a plain
-    value and touch no heap. `tests/alloc_scan.sh` measures that claim
-    over 41 functions.
+    value and touch no heap. `tests/alloc_scan.sh` reads the emitted
+    LLVM of those 41 functions and finds no call to the allocator.
 
 ## What is not included
 
@@ -245,7 +236,7 @@ and clamp the day.
   being one.
 - **A build for a microcontroller.** Both formatters build strings, and
   a string needs a heap allocator. The arithmetic half touches no heap,
-  but the package makes no claim to compile for a target without one.
+  and the package is not built for a target without one.
 
 ## Related packages
 
@@ -323,38 +314,6 @@ the sign of a `TimeDelta` lives in the seconds field, that
 `parse(format(x))` is `x`, that the ISO week-numbering year differs
 from the calendar year at the turn of 2027, and that `%Y` and the rest
 of the directive table agree with `directives()`.
-
-## Implementation status
-
-Everything the package declares is implemented. `novo doc` renders the
-signature and the example of each of them.
-
-| Item | Implemented |
-| --- | --- |
-| `civil.CivilDate`, `.CivilTime`, `.CivilDateTime`, `.Weekday`, `.Month` | yes |
-| `span.TimeDelta`, `calerror.CalError` | yes |
-| `civil.date`, `.date_ordinal`, `.date_from_epoch_day`, `.epoch_day` | yes |
-| `civil.time_of`, `.midnight`, `.datetime`, `.nano_of_day` | yes |
-| `civil.weekday`, `.weekday_number`, `.weekday_of`, `.month_of`, `.month_number`, `.day_of_year` | yes |
-| `civil.is_leap_year`, `.days_in_month` | yes |
-| `civil.iso_week`, `.from_iso_week` | yes |
-| `civil.compare_date`, `.compare_datetime` | yes |
-| `span.nanoseconds`, `.milliseconds`, `.seconds`, `.minutes`, `.hours`, `.days` | yes |
-| `span.as_seconds`, `.subsec_nanos` | yes |
-| `span.add`, `.sub`, `.negate`, `.magnitude`, `.is_negative`, `.compare` | yes |
-| `arith.add_days`, `.add_months`, `.add_years`, `.add_delta` | yes |
-| `arith.days_between`, `.months_between`, `.between` | yes |
-| `arith.start_of_month`, `.end_of_month` | yes |
-| `iso8601.parse_date`, `.parse_time`, `.parse_datetime`, `.parse_rfc3339` | yes |
-| `iso8601.format_date`, `.format_time`, `.format_datetime`, `.format_rfc3339` | yes |
-| `iso8601.parse_duration`, `.format_duration` | yes |
-| `strfmt.format`, `.parse`, `.directives` | yes |
-| `calerror.offset_of`, `CalError.message` | yes |
-
-Two functions are new in 0.1.0 and were not in the published interface.
-`civil.nano_of_day` is the one number two times of day are compared by.
-`civil.weekday_of` is the inverse of `civil.weekday_number`, which both
-parsers need to turn a weekday digit back into a `Weekday`.
 
 ## Licence
 

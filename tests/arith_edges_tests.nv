@@ -1,13 +1,14 @@
 // arith_edges_tests.nv — where moving a date runs out of calendar, and
 // where the arithmetic goes backwards past zero.
 //
-// Two groups of cases.  The refusals: every operation here answers
-// `Overflow` rather than trapping when the count it is given cannot
-// land inside the years this package represents, and each of the four
-// has its own bound because a day, a month, a year and a length of
-// time are four different sizes.  And the negative side: a date before
-// the epoch divides the other way, and a difference read backwards is
-// the negation of the same difference read forwards.
+// There are two groups of cases.  The first is the refusals.  Every
+// operation here answers `Overflow` rather than trapping when the count
+// it is given cannot land inside the years this package represents, and
+// each of the four has its own bound, because a day, a month, a year
+// and a length of time are four different sizes.  The second is the
+// negative side.  A date before the epoch divides the other way, and a
+// difference read backwards is the negation of the same difference read
+// forwards.
 
 use std.test
 use arith

@@ -1,13 +1,10 @@
-// span_tests.nv — the API suite for `TimeDelta`.
+// span_tests.nv — the suite for `TimeDelta`.
 //
-// RED ON PURPOSE: every body is a `todo()`.  Run with `--isolate` for
-// one verdict per `@test`.
-//
-// The invariant most of these cases are about: `nanos` is always in
-// `0 ..= 999_999_999` and the sign lives entirely in `secs`, so
-// `-1.5s` is `(-2, 500_000_000)`.  It is the reason `as_seconds`
-// truncates toward negative infinity, and getting it wrong is the
-// classic off-by-one in a signed duration type.
+// Most of these cases are about one invariant.  `nanos` is always in
+// `0 ..= 999_999_999` and the sign lives entirely in `secs`, so `-1.5s`
+// is `(-2, 500_000_000)`.  That is the reason `as_seconds` truncates
+// toward negative infinity, and getting it wrong is the common
+// off-by-one in a signed length of time.
 
 use std.test
 use span

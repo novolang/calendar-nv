@@ -1,13 +1,10 @@
-// format_tests.nv — the API suite for the two formatters: the
-// interchange one and the one a person reads.
+// format_tests.nv — the suite for the two formatters, the interchange
+// one and the one a person reads.
 //
-// RED ON PURPOSE: every body is a `todo()`.  Run with `--isolate` for
-// one verdict per `@test`.
-//
-// The promise under the round-trip cases is `parse(format(x)) == x`
-// for every value this package can build.  The reverse is not
-// promised and the cases say so: `09:30`, `09:30:00` and `09:30:00.000`
-// are one value with three spellings.
+// The promise under the round-trip cases is `parse(format(x)) == x` for
+// every value this package can build.  The reverse is not promised, and
+// the cases say so.  `09:30`, `09:30:00` and `09:30:00.000` are one
+// value with three spellings.
 
 use std.test
 use iso8601
@@ -16,7 +13,7 @@ use civil
 use span
 use calerror
 
-// Fixture builders — the note is in tests/civil_tests.nv.
+// Fixture builders.  The note on them is in tests/civil_tests.nv.
 fn day(y: Int, m: Int, d: Int) -> CivilDate
     civil.date(y, m, d)!
 

@@ -1,21 +1,19 @@
 [package]
 name        = "calendar-nv"
-version     = "0.1.0"
+version     = "0.1.1"
 description = "Civil dates, times and durations with no clock in them: proleptic Gregorian construction that validates, day and month arithmetic with the end-of-month rule written down, ISO 8601 and RFC 3339 in both directions, ISO week numbers, and a strftime-shaped formatter over a named subset."
 license     = "Apache-2.0"
 
-# An IMPLEMENTED release: every `pub fn` has a body and every suite is
-# green, so the 0.0.x versions and the draft stability are behind it.
-# `experimental` rather than `beta`: the signatures are the ones
-# published as an interface at 0.0.1 and may still move while the
-# packages built on this one are written.
+# `experimental` rather than `beta`.  The signatures may still move
+# while the packages built on this one are written, and no program
+# outside this repository has used them yet.
 stability   = "experimental"
 
-# `core`, and this one is easy: there is no clock, no zone database and
-# no file anywhere in the package.  Every function is arithmetic over
-# integers the caller already holds.  The half that needs a machine —
-# `now`, the local offset, a monotonic reading — is `chrono-nv`, which
-# depends on this and declares its own effects.
+# `core`.  There is no clock, no zone database and no file anywhere in
+# the package.  Every function is arithmetic over integers the caller
+# already holds.  The half that needs a machine is `chrono-nv`, which
+# depends on this one and declares its own effects.  That half is `now`,
+# the local offset and a monotonic reading.
 layer       = "core"
 
 category    = "time"
@@ -23,12 +21,12 @@ category    = "time"
 tags        = ["date", "time", "calendar", "iso8601", "rfc3339", "duration", "chrono"]
 repository  = "https://github.com/novolang/calendar-nv"
 maintainers = ["novo-lang"]
-# Raised from 0.8.9 by this release.  `strfmt` writes a literal byte of
-# a format string back out with `str.from_byte`, which 0.9.1 added.
-# The alternative, `str.from_char`, treats its argument as a Unicode
-# code point, so a format string holding any character above U+007F —
-# `"%d. Marz"` with an umlaut in it — would come back with a
-# replacement character where each of its bytes was.
+# `strfmt` writes a literal byte of a format string back out with
+# `str.from_byte`, which the toolchain has from 0.9.1.  The alternative,
+# `str.from_char`, treats its argument as a Unicode code point.  A
+# format string holding any character above U+007F, such as `"%d. Marz"`
+# with an umlaut in it, would then come back with a replacement
+# character where each of its bytes was.
 novo        = ">= 0.9.1"
 
 # A library: no `main`, so `novo pkg build` type-checks and
@@ -38,6 +36,5 @@ novo        = ">= 0.9.1"
 "README.md" = "Dates and durations without a clock"
 
 [dependencies]
-# None.  The day-number conversions are Howard Hinnant's, transcribed;
-# the parsers are hand-written scans; and a package that needed a
-# dependency to add two dates would be the wrong package.
+# None.  The day-number conversions are Howard Hinnant's, transcribed,
+# and the parsers are hand-written scans.

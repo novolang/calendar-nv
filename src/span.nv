@@ -1,33 +1,30 @@
 // span.nv — a signed length of time, exact to the nanosecond.
 //
-// WHY IT IS NOT CALLED `Duration`
+// The type is not called `Duration`, because it cannot be.  The
+// standard library declares `struct Duration`, and redeclaring it is
+// E2000.  `TimeDelta` is chrono's own current name for the same type.
+// `chrono::Duration` was renamed to `chrono::TimeDelta` over the same
+// collision, with the old name kept as an alias, so the port takes the
+// newer name and reads as a port.
 //
-// Because it cannot be: the standard library declares `struct
-// Duration` and redeclaring it is E2000.  `TimeDelta` is chrono's own
-// current name for the same type — `chrono::Duration` was renamed to
-// `chrono::TimeDelta` for exactly the collision reason, with the old
-// name kept as an alias — so the port takes the newer name and reads
-// as a port rather than as a workaround.
+// It is a second type beside `std.time.Duration`, and the difference is
+// worth knowing before reaching for either.  The standard library's is
+// microseconds in an `Int`, and it is what a monotonic clock hands
+// back.  This one is whole seconds plus a nanosecond field, it is
+// signed, and it is what subtracting one civil date-time from another
+// gives.  `chrono-nv` is where the two meet, because that is where a
+// clock is.
 //
-// It is also a DIFFERENT type from `std.time.Duration`, and the
-// difference is worth knowing before reaching for either: the standard
-// library's is microseconds in an `Int` and is what a monotonic clock
-// hands you; this one is whole seconds plus a nanosecond field, is
-// signed, and is what you get when you subtract one civil date-time
-// from another.  `chrono-nv` is where the two meet, because that is
-// where a clock is.
+// The value is seconds plus nanoseconds rather than one number.  One
+// `Int` of nanoseconds overflows at about 292 years, which is inside
+// the range a calendar library is asked about.  "How long between 1800
+// and today" is an ordinary question.  One `Float` of seconds loses the
+// nanosecond around the present day.  Two fields cost one comparison in
+// the arithmetic and answer both.
 //
-// WHY SECONDS PLUS NANOS AND NOT ONE NUMBER
-//
-// One `Int` of nanoseconds overflows at about 292 years, which is
-// inside the range a calendar library is asked about — "how long
-// between 1800 and today" is an ordinary question.  One `Float` of
-// seconds loses the nanosecond around the present day.  Two fields
-// cost one comparison in the arithmetic and answer both.
-//
-// THE INVARIANT the constructors keep and every operation preserves:
+// The constructors keep one invariant and every operation preserves it.
 // `nanos` is in `0 ..= 999_999_999`, and the sign lives entirely in
-// `secs`.  So `-0.5s` is `secs = -1, nanos = 500_000_000` — the same
+// `secs`.  So `-0.5s` is `secs = -1, nanos = 500_000_000`.  That is the
 // normalisation Rust's `TimeDelta` and Go's `time.Duration` arithmetic
 // produce, and the reason `as_seconds` truncates toward negative
 // infinity rather than toward zero.
@@ -45,8 +42,8 @@ pub @value
 struct TimeDelta
     // Whole seconds, signed.  The sign of the whole value.
     secs: Int
-    // `0 ..= 999_999_999`, always non-negative — see the module note
-    // on the invariant.
+    // `0 ..= 999_999_999`, always non-negative.  The module note above
+    // states the invariant.
     nanos: Int
 
 // A length in nanoseconds.
@@ -116,12 +113,12 @@ pub fn hours(n: Int) -> TimeDelta
 
 // A length in days, where a day is exactly 86,400 seconds.
 //
-// That is the ONLY reading available to a package with no zone in it,
-// and it is worth saying because it is not the reading a calendar user
-// always wants: across a daylight-saving boundary a civil day is 23 or
-// 25 hours, and this package cannot know where the boundaries are.  A
-// caller who means "the same clock time tomorrow" wants
-// `arith.add_days`, which moves the date and leaves the time alone.
+// That is the one reading available to a package with no zone in it,
+// and it is not always the reading a calendar user wants.  Across a
+// daylight-saving boundary a civil day is 23 or 25 hours, and this
+// package cannot know where the boundaries are.  A caller who means
+// "the same clock time tomorrow" wants `arith.add_days`, which moves
+// the date and leaves the time alone.
 //
 // ```novo
 // use span
@@ -134,11 +131,11 @@ pub fn days(n: Int) -> TimeDelta
 
 // Whole seconds, truncated toward negative infinity.
 //
-// So `as_seconds(milliseconds(-1500))` is `-2`, not `-1`: the value is
-// `secs = -2, nanos = 500_000_000` and this returns the field.  Toward
-// negative infinity and not toward zero because that is what keeps
-// `as_seconds` a projection of the representation rather than a second
-// rounding rule to remember.
+// So `as_seconds(milliseconds(-1500))` is `-2` rather than `-1`.  The
+// value is `secs = -2, nanos = 500_000_000`, and this answers the
+// field.  Toward negative infinity rather than toward zero, so that
+// `as_seconds` reads a field off the value rather than applying a
+// second rounding rule.
 //
 // ```novo
 // use span
@@ -151,7 +148,7 @@ pub fn as_seconds(d: TimeDelta) -> Int
 
 // The nanosecond part, `0 ..= 999_999_999`.
 //
-// Always non-negative, whatever the sign of the value — the pair
+// Always non-negative, whatever the sign of the value.  The pair
 // `(as_seconds, subsec_nanos)` is the representation, and reassembling
 // it is `seconds(s) + nanoseconds(n)`.
 //
@@ -273,9 +270,9 @@ fn int_max() -> Int
 // The most negative `Int`.
 //
 // Written as a subtraction because the magnitude is one above
-// `int_max` and the lexer refuses a literal that large: the minus in
-// front of a number is a prefix operator, not part of the number
-// (SPEC § 13.5).
+// `int_max` and the lexer refuses a literal that large.  The minus in
+// front of a number is a prefix operator rather than part of the
+// number (SPEC § 13.5).
 fn int_min() -> Int
     -9223372036854775807 - 1
 

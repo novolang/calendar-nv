@@ -1,16 +1,16 @@
 // iso8601_vectors_tests.nv — the subset this package accepts, written
 // out one string at a time, and every refusal it makes.
 //
-// The accepted and refused lists at the top of `src/iso8601.nv` are
-// the specification; this file is that list as assertions, so a reader
+// The accepted and refused lists at the top of `src/iso8601.nv` are the
+// specification, and this file is those lists as assertions.  A reader
 // deciding whether their input will be read can find the answer here
 // without running anything.
 //
-// The round trips are the load-bearing cases.  `parse(format(x)) == x`
-// is promised for every value the package can build, and the years
-// outside `0 ..= 9999` are where a formatter usually breaks it: a year
-// of five digits or a negative one is written with the digits it needs
-// and read back the same way.
+// The round trips are the cases to read first.  `parse(format(x)) == x`
+// is promised for every value the package can build, and a year outside
+// `0 ..= 9999` is where a formatter usually breaks it.  A year of five
+// digits or a negative one is written with the digits it needs and read
+// back the same way.
 
 use std.test
 use civil

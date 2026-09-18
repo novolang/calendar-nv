@@ -1,7 +1,8 @@
 // iso8601.nv — the two interchange formats, read and written.
 //
-// ISO 8601 IS A LARGE STANDARD AND THIS IS A SUBSET, named here so a
-// reader does not have to discover it by failing:
+// ISO 8601 is a large standard and this module reads a subset of it.
+// The subset is named here, so a reader does not have to discover it by
+// failing.
 //
 //   accepted     `2026-03-15`, `09:30`, `09:30:00`, `09:30:00.5`,
 //                `2026-03-15T09:30:00`, `2026-074` (ordinal),
@@ -15,23 +16,24 @@
 //
 // RFC 3339 is the smaller, stricter profile of the same syntax with an
 // offset that is always present, and it is what an API actually sends.
-// It gets its own pair of functions because the offset is part of the
-// value there and is not part of a `CivilDateTime`: the parse returns
-// the offset beside the date-time and the caller decides what to do
-// with it.  Applying it is `chrono-nv`'s job, because it takes a zone
+// It has its own pair of functions because the offset is part of the
+// value there and is not part of a `CivilDateTime`.  The parse answers
+// the offset beside the date-time, and the caller decides what to do
+// with it.  Applying it belongs to `chrono-nv`, because it takes a zone
 // to know what applying it means.
 //
-// LEAP SECONDS.  RFC 3339 § 5.7 permits `:60` and this parser ACCEPTS
-// it, mapping it onto the first instant of the following minute — the
-// same reading `std.time`'s `Zoned.parse_rfc3339` takes, so the two
-// agree on every string.  `civil.time_of(23, 59, 60, 0)` is still an
-// error: the value does not exist, and only a parser has the context
-// to turn text that says it does into the value that was meant.
+// A leap second is accepted here and refused by the constructor.  RFC
+// 3339 § 5.7 permits `:60`, and this parser reads it as the first
+// instant of the following minute.  That is the reading `std.time`'s
+// `Zoned.parse_rfc3339` takes, so the two agree on every string.
+// `civil.time_of(23, 59, 60, 0)` is still an error, because the value
+// does not exist.  Only a parser has the context to turn text that says
+// it does into the value that was meant.
 //
-// WHAT `format` GUARANTEES.  `parse(format(x)) == x` for every value
-// this package can build.  The reverse — `format(parse(s)) == s` — is
-// not promised and cannot be: `09:30`, `09:30:00` and `09:30:00.000`
-// are one value with three spellings, and output picks one.
+// `format` guarantees that `parse(format(x)) == x` for every value this
+// package can build.  The reverse, `format(parse(s)) == s`, is not
+// promised and cannot be.  `09:30`, `09:30:00` and `09:30:00.000` are
+// one value with three spellings, and output picks one.
 
 use arith
 use civil
@@ -42,7 +44,7 @@ use span
 // or an ISO week date from `YYYY-Www-D`.
 //
 // Which of the three is decided by the shape after the year, so a
-// caller does not choose a parser; there is one date syntax and three
+// caller does not choose a parser.  There is one date syntax, and three
 // ways to write a day in it.
 //
 // ```novo
@@ -61,10 +63,10 @@ pub fn parse_date(s: Str) -> Result<CivilDate, CalError>
 
 // A time of day from `HH:MM`, `HH:MM:SS` or `HH:MM:SS.fffffffff`.
 //
-// Fractional digits past the ninth are refused rather than dropped: a
-// string with more precision than this type has is a string the caller
-// should know about, and silently truncating it is how a round trip
-// stops being one.
+// Fractional digits past the ninth are refused rather than dropped.  A
+// string that carries more precision than this type holds is a string
+// the caller should know about, and truncating it silently is how a
+// round trip stops being one.
 //
 // ```novo
 // use iso8601
@@ -83,10 +85,10 @@ pub fn parse_time(s: Str) -> Result<CivilTime, CalError>
 // A date and time from `<date>T<time>`, with a lower-case `t` or a
 // single space also accepted as the separator.
 //
-// No offset: a string with one is RFC 3339 and belongs to
-// `parse_rfc3339`, which returns the offset instead of discarding it.
+// No offset.  A string with one is RFC 3339 and belongs to
+// `parse_rfc3339`, which answers the offset instead of discarding it.
 // A trailing `Z` here is `TrailingText`, and that refusal is on
-// purpose — silently ignoring a `Z` is how a UTC timestamp becomes a
+// purpose.  Ignoring a `Z` silently is how a UTC timestamp becomes a
 // local one.
 //
 // ```novo
@@ -106,14 +108,14 @@ pub fn parse_datetime(s: Str) -> Result<CivilDateTime, CalError>
 // An RFC 3339 timestamp: the civil date-time as written, and the
 // offset in minutes east of UTC.
 //
-// The pair, rather than a normalised UTC value, because the offset is
-// information the sender chose to include — `+02:00` says which wall
-// the reading came off — and a library that folded it away would make
-// `format_rfc3339(parse_rfc3339(s))` print a different string from the
-// one it read.
+// The answer is the pair rather than a normalised UTC value, because
+// the offset is information the sender chose to include.  `+02:00` says
+// which wall the reading came off.  A library that folded it away would
+// make `format_rfc3339(parse_rfc3339(s))` print a different string from
+// the one it read.
 //
 // `Z` and `z` are offset `0`.  `-00:00` means "offset unknown" (§ 4.3)
-// and is also `0`; this package does not model the distinction, and
+// and is also `0`.  This package does not model the distinction, and
 // neither does `std.time`.  `:60` is accepted as a leap second and
 // lands on the following minute.
 //
@@ -198,9 +200,9 @@ pub fn format_datetime(dt: CivilDateTime) -> Str
 // `<date>T<time><offset>`, where the offset is `Z` for zero and
 // `+HH:MM` or `-HH:MM` otherwise.
 //
-// The offset is an argument and not a field of the value, because a
-// `CivilDateTime` has no zone: this function writes the timestamp a
-// caller who KNOWS the offset wants to send.
+// The offset is an argument rather than a field of the value, because a
+// `CivilDateTime` has no zone.  This function writes the timestamp a
+// caller who already holds the offset wants to send.
 //
 // ```novo
 // use iso8601
@@ -217,12 +219,12 @@ pub fn format_rfc3339(dt: CivilDateTime, offset_min: Int) -> Str
 // An ISO 8601 duration — `P3DT4H30M`, `PT1.5S`, `-PT30M` — as a
 // `TimeDelta`.
 //
-// The subset is the fixed-length part: days, hours, minutes and
-// seconds, with a fractional seconds field.  **`Y` and `M` in the date
-// part are refused**, because a year and a month are not lengths of
-// time and a `TimeDelta` cannot hold one.  `P1M` is `BadFormat` with
-// that as the reason, rather than 30 days, which is the guess this
-// package will not make.  `W` is accepted and is 7 days.
+// The subset is the fixed-length part.  That is days, hours, minutes
+// and seconds, with a fractional seconds field.  `Y` and `M` in the
+// date part are refused, because a year and a month are not lengths of
+// time and a `TimeDelta` cannot hold one.  `P1M` is `BadFormat` naming
+// that reason rather than 30 days, which is a guess this package does
+// not make.  `W` is accepted and is 7 days.
 //
 // ```novo
 // use iso8601
@@ -277,9 +279,9 @@ pub fn format_duration(d: TimeDelta) -> Str
 
 // A time of day as the scanner found it, with the offset it stopped at.
 //
-// The second can be 60 here and a `CivilTime`'s cannot: RFC 3339 § 5.7
-// permits a leap second in the text, and only a caller that also holds
-// a date can say which instant that text names.
+// The second can be 60 here and a `CivilTime`'s cannot.  A leap second
+// in the text is permitted by RFC 3339 § 5.7, and only a caller that
+// also holds a date can say which instant that text names.
 @value
 struct ClockScan
     hour: Int
@@ -383,8 +385,8 @@ fn scan_datetime(s: Str, i: Int) -> Result<(CivilDateTime, Int), CalError>
 
 // One component of a duration, folded into the length built so far.
 //
-// Recursive rather than a loop because a component can fail and `!`
-// carries the reason out of it; `i` only ever moves forward, so the
+// Recursive rather than a loop, because a component can fail and `!`
+// carries the reason out of it.  `i` only ever moves forward, so the
 // recursion is bounded by the length of the input.
 fn scan_components(s: Str, i: Int, in_time: Bool, acc: TimeDelta,
                    seen: Int) -> Result<TimeDelta, CalError>
@@ -425,9 +427,9 @@ fn scan_components(s: Str, i: Int, in_time: Bool, acc: TimeDelta,
 // How many seconds one unit of a designator is, or `0` when the letter
 // is not a designator this subset accepts where it stands.
 //
-// `Y` and `M` outside the time part answer `0` on purpose: a year and
-// a month are not lengths of time, and the caller turns that into the
-// refusal the module note promises.
+// `Y` and `M` outside the time part answer `0` on purpose.  A year and
+// a month are not lengths of time, and the caller turns that `0` into
+// the refusal the module note describes.
 fn unit_seconds(unit: Int, in_time: Bool) -> Int
     if in_time
         if unit == 72   // 'H'

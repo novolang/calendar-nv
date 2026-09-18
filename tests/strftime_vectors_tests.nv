@@ -1,14 +1,14 @@
 // strftime_vectors_tests.nv — every directive in the table, written
 // and read back.
 //
-// The table at the top of `src/strfmt.nv` is the whole of what this
-// module implements, in one locale.  Each directive gets a case here
-// with the text it produces for a date whose every field is known —
-// Sunday the 15th of March 2026, at 09:30:00.123456789 — so the
-// expected strings can be checked by eye against any C library.
+// The table at the top of `src/strfmt.nv` is the whole of what that
+// module reads and writes, in one locale.  Each directive has a case
+// here with the text it produces for a date whose every field is known.
+// That date is Sunday the 15th of March 2026, at 09:30:00.123456789, so
+// the expected strings can be checked by eye against any C library.
 //
 // `directives()` is asserted against `format` rather than against a
-// list written twice: every entry of the list formats, and nothing
+// list written twice.  Every entry of the list formats, and nothing
 // outside the list does.
 
 use std.test
@@ -20,8 +20,8 @@ use strfmt
 fn day(y: Int, m: Int, d: Int) -> CivilDate
     civil.date(y, m, d)!
 
-// The reference value: every field distinct, so a directive that read
-// the wrong one shows it.
+// The reference value.  Every field is distinct, so a directive that
+// read the wrong one shows it.
 fn subject() -> CivilDateTime
     civil.datetime(day(2026, 3, 15), civil.time_of(9, 30, 0, 123456789)!)
 

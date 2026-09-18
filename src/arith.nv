@@ -1,35 +1,30 @@
 // arith.nv — moving a date, and the one rule that makes it ambiguous.
 //
-// THE END-OF-MONTH RULE
-//
+// The end-of-month rule is that rule, and it is written down here.
 // "One month after the 31st of January" has no arithmetic answer,
-// because February has no 31st.  Every date library picks a reading and
-// most of them do not write it down.  This one does:
+// because February has no 31st.  Every date library picks a reading,
+// and this one writes it down.
 //
 //     add_months(2026-01-31, 1)  ==  2026-02-28
 //     add_months(2024-01-31, 1)  ==  2024-02-29
 //
-// **The day is CLAMPED to the last day of the target month.**  That is
+// The day is clamped to the last day of the target month.  That is
 // chrono's `checked_add_months`, Python's `dateutil.relativedelta`, and
-// what a person means when they say "the last of next month".  It is
-// also NOT reversible: adding a month to the 31st and subtracting one
-// gives the 28th, not the 31st.  A caller who needs the round trip
-// keeps the original date, which is a thing they can do and this
-// package cannot.
+// what a person means by "the last of next month".  The clamp is not
+// reversible.  Adding a month to the 31st and subtracting one gives the
+// 28th rather than the 31st.  A caller who needs the round trip keeps
+// the original date, which this package cannot do for them.
 //
-// The alternative — rolling forward into March 3rd — is what naive
-// day arithmetic produces and is what nobody means.  It is not
-// available here, and the way to get it is `add_days`, which is honest
-// about counting days.
+// The other reading rolls forward into the 3rd of March, which is what
+// plain day arithmetic produces.  It is not available from this
+// function.  `add_days` counts days and is the way to get it.
 //
-// WHY DAYS AND MONTHS ARE DIFFERENT FUNCTIONS
-//
-// A day is a fixed length and a month is not, so `add_days` is exact
-// arithmetic on the epoch day and `add_months` is a calendar
-// operation with the clamp above.  Folding them into one
-// "add a duration" call is what forces a library to pretend a month is
-// 30 days.  `span.TimeDelta` therefore has no month unit, and there is
-// no function here that takes one.
+// Days and months are separate functions because a day is a fixed
+// length and a month is not.  `add_days` is exact arithmetic on the
+// epoch day, and `add_months` is a calendar operation with the clamp
+// above.  One "add a duration" call over both is what forces a library
+// to treat a month as 30 days.  `span.TimeDelta` therefore has no month
+// unit, and no function here takes one.
 
 use civil
 use span
@@ -56,9 +51,8 @@ pub fn add_days(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
 // The date `n` months later, with the day clamped to the last day of
 // the target month.
 //
-// The rule is at the top of this module and it is the load-bearing
-// decision of the file: `2026-01-31` plus one month is `2026-02-28`,
-// and the operation is not reversible.
+// The rule is at the top of this module.  `2026-01-31` plus one month
+// is `2026-02-28`, and the operation is not reversible.
 //
 // ```novo
 // use arith
@@ -85,7 +79,7 @@ pub fn add_months(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
 // The date `n` years later, with the same clamp: the 29th of February
 // plus one year is the 28th.
 //
-// `add_months(d, 12 * n)` by definition, and a separate name because
+// `add_months(d, 12 * n)` by definition, under a separate name because
 // that is what the call site means.
 //
 // ```novo
@@ -105,10 +99,10 @@ pub fn add_years(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
 // The date-time a length of time later, or earlier when the length is
 // negative.
 //
-// Exact seconds and nanoseconds — no clamping, because a
-// `span.TimeDelta` has no months in it.  A day here is 86,400 seconds:
-// this package has no zone and therefore no daylight-saving boundary
-// to be short or long across.
+// Exact seconds and nanoseconds, with no clamping, because a
+// `span.TimeDelta` has no months in it.  A day here is 86,400 seconds.
+// This package has no zone and therefore no daylight-saving boundary to
+// be short or long across.
 //
 // ```novo
 // use arith
@@ -137,9 +131,9 @@ pub fn add_delta(dt: CivilDateTime, d: TimeDelta) -> Result<CivilDateTime, CalEr
 
 // Whole days from `a` to `b`, negative when `b` is earlier.
 //
-// Exact, because a day between two dates is exactly a day.  This is
-// the difference operation with no caveats, which is why it returns an
-// `Int` rather than a `Result`.
+// Exact, because a day between two dates is exactly a day.  It is the
+// difference operation with no caveats, so it answers an `Int` rather
+// than a `Result`.
 //
 // ```novo
 // use arith
@@ -153,14 +147,14 @@ pub fn add_delta(dt: CivilDateTime, d: TimeDelta) -> Result<CivilDateTime, CalEr
 pub fn days_between(a: CivilDate, b: CivilDate) -> Int
     civil.epoch_day(b) - civil.epoch_day(a)
 
-// WHOLE months from `a` to `b`, truncated toward zero.
+// Whole months from `a` to `b`, truncated toward zero.
 //
-// "Whole" is the caveat and it is the reason this is not the inverse
-// of `add_months`: from the 31st of January to the 28th of February is
-// **0** months, because the 28th is not yet a month later by the day
-// number — even though `add_months` maps the one to the other.  A
-// difference that reported 1 there would let a caller add it back and
-// land somewhere else.
+// "Whole" is the caveat, and it is the reason this is not the inverse
+// of `add_months`.  From the 31st of January to the 28th of February is
+// zero months, because the 28th is not yet a month later by the day
+// number, even though `add_months` maps the one to the other.  A
+// difference that answered one there could be added back and land
+// somewhere else.
 //
 // ```novo
 // use arith
@@ -183,8 +177,8 @@ pub fn months_between(a: CivilDate, b: CivilDate) -> Int
 // The exact length of time from `a` to `b`, negative when `b` is
 // earlier.
 //
-// Seconds and nanoseconds, with no months in it — see
-// `months_between` for the calendar reading of the same question.
+// Seconds and nanoseconds, with no months in it.  `months_between` is
+// the calendar reading of the same question.
 //
 // ```novo
 // use arith
@@ -235,9 +229,9 @@ pub fn end_of_month(d: CivilDate) -> CivilDate
 // One day more than the calendar this package represents holds.
 //
 // A count larger than this leaves the year range whatever date it
-// starts from, so it is refused BEFORE the addition rather than after:
-// the addition itself would trap on integer overflow, and a trap is
-// not the `Overflow` a caller asked to be told about.
+// starts from, so it is refused before the addition rather than after.
+// The addition itself would trap on integer overflow, and a trap is not
+// the `Overflow` a caller asked to be told about.
 fn day_span() -> Int
     400000000000
 
@@ -246,9 +240,9 @@ fn day_span() -> Int
 fn second_span() -> Int
     day_span() * 86400
 
-// Division rounded toward negative infinity, for a positive divisor —
-// the same rule `civil` applies, kept private because a package's
-// public surface is its interface and this is arithmetic.
+// Division rounded toward negative infinity, for a positive divisor.
+// It is the same rule `civil` applies, and it is private because it is
+// arithmetic rather than part of what the package offers.
 fn floor_div(a: Int, b: Int) -> Int
     let q = a / b
     if a < 0 and q * b != a

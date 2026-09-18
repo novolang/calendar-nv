@@ -1,13 +1,11 @@
 // strfmt.nv — a `strftime`-shaped formatter, over a named subset.
 //
-// THE SUBSET, AND WHY IT IS WRITTEN DOWN
-//
-// `strftime` is a C interface whose directive set depends on the
-// platform, the locale and the phase of the moon.  A port that said
-// "strftime-compatible" would be making a promise nobody can check.
-// So this module implements exactly the directives below, in one
-// locale — the invariant one, English, ASCII — and every other `%x`
-// is `UnknownDirective` with the two characters and their offset.
+// The subset is written down because `strftime` is a C interface whose
+// directive set depends on the platform and the locale.  A port that
+// said "strftime-compatible" would be making a promise nobody can
+// check.  This module has exactly the directives below, in one locale,
+// which is the invariant one, English and ASCII.  Every other `%x` is
+// `UnknownDirective` carrying the two characters and their offset.
 //
 //   %Y  year, at least four digits, `-` for negative
 //   %y  year modulo 100, two digits
@@ -25,25 +23,25 @@
 //   %F  `%Y-%m-%d`            %T  `%H:%M:%S`
 //   %%  a literal `%`
 //
-// NOT HERE, on purpose: `%Z` and `%z`, which are a zone and a zone is
-// `chrono-nv`'s; `%s`, the Unix timestamp, which needs an epoch and
-// therefore a zone; `%c`, `%x` and `%X`, which are locale-defined and
-// this package has one locale; and `%U`/`%W`, the two non-ISO week
-// numberings, which exist mostly to be confused with `%V`.
+// Five directives are left out on purpose.  `%Z` and `%z` are a zone,
+// and a zone belongs to `chrono-nv`.  `%s` is the Unix timestamp, which
+// needs an epoch and therefore a zone.  `%c`, `%x` and `%X` are
+// locale-defined, and this package has one locale.  `%U` and `%W` are
+// the two week numberings that are not the ISO one, which `%V` is.
 //
-// WHY IT IS NOT THE ONLY FORMATTER.  `iso8601` is the one to reach for
-// when the output is going to another program: it is a fixed grammar
-// with a round-trip guarantee.  This one is for output a person reads,
-// where the caller picks the shape.
+// This is the second formatter in the package.  `iso8601` is the one to
+// reach for when the output is going to another program, because it is
+// a fixed grammar with a round-trip guarantee.  This one is for output
+// a person reads, where the caller picks the shape.
 //
-// `parse` IS THE SAME TABLE READ BACKWARDS, and it is narrower than
-// `format` by necessity.  `%A` and `%a` are accepted and CHECKED
-// against the date the rest of the format produced, but contribute
-// nothing a date can be built from — a weekday name names no day.
-// `%B` and `%b` do contribute: a month name is a month, so `%B %d %Y`
-// is a format that determines a date.  A format string that does not
-// determine one — no year, or no day — is `BadFormat` before any input
-// is read.
+// `parse` is the same table read backwards, and it is narrower than
+// `format`.  `%A` and `%a` are read and checked against the date the
+// rest of the format produced, and they contribute nothing a date can
+// be built from, because a weekday name names no day.  `%B` and `%b` do
+// contribute, because a month name names a month, so `%B %d %Y` is a
+// format that determines a date.  A format string that determines no
+// date, for want of a year or a day, is `BadFormat` before any input is
+// read.
 
 use std.list
 use std.str
@@ -88,16 +86,16 @@ pub fn format(dt: CivilDateTime, fmt: Str) -> Result<Str, CalError>
 
 // A date-time read back out of a string that has the given shape.
 //
-// The format string is the same table; literal bytes in it must match
-// the input exactly, and `%` directives consume what they would have
-// produced.  `BadFormat` when the input diverges, with the offset in
-// the INPUT — which is the string the caller is trying to fix.
+// The format string is the same table.  A literal byte in it must match
+// the input exactly, and a `%` directive consumes what it would have
+// produced.  `BadFormat` when the input diverges, carrying the offset
+// in the input, which is the string the caller is trying to fix.
 //
-// A format that cannot determine a date is refused before the input is
-// looked at: `"%H:%M"` names no day, and a parser that filled in a
-// default would be inventing one.  Missing TIME fields default to
-// midnight, because a date with no time in it is an ordinary thing to
-// write and a day is a real value.
+// A format that determines no date is refused before the input is
+// looked at.  `"%H:%M"` names no day, and a parser that filled one in
+// would be inventing it.  A missing field of the time defaults to
+// midnight, because a date with no time on it is an ordinary thing to
+// write.
 //
 // ```novo
 // use strfmt
@@ -231,9 +229,8 @@ pub fn parse(s: Str, fmt: Str) -> Result<CivilDateTime, CalError>
 // `["%Y", "%y", "%m", …]` — in the order of the table above.
 //
 // It exists so that a program taking a format string from a user can
-// tell them what is available without this file being the only place
-// the list is written down, and so that a test can assert the two
-// halves agree rather than trusting the comment.
+// tell them what is available, and so that a test can assert that the
+// list and the formatter agree rather than trusting the comment above.
 //
 // ```novo
 // use strfmt
@@ -269,10 +266,9 @@ pub fn directives() -> [Str]
 // The text one directive stands for, or `None` when the byte after the
 // `%` is not a directive this module implements.
 //
-// This chain is the table at the top of the module, and `directives`
-// is the same table as a list; a test asserts that every entry of the
-// list formats through this function, which is what keeps the two in
-// step.
+// This chain is the table at the top of the module, and `directives` is
+// the same table as a list.  A test asserts that every entry of the
+// list formats through this function, which keeps the two in step.
 fn directive(dt: CivilDateTime, code: Int) -> ?Str
     let d = dt.date
     let t = dt.time
@@ -437,9 +433,9 @@ fn contribution(code: Int) -> Int
 // Whether a format string names enough to build a date, and whether
 // every directive in it is one this module implements.
 //
-// Checked BEFORE the input is read, because a format that cannot name
-// a day is the caller's mistake rather than their data's, and the
-// offsets a later refusal carries are offsets into the INPUT.
+// Checked before the input is read, because a format that names no day
+// is the caller's mistake rather than their data's, and the offset a
+// later refusal carries is an offset into the input.
 fn check_format(fmt: Str) -> Result<Int, CalError>
     var provides = 0
     var skip = false
@@ -509,9 +505,9 @@ fn read_half_of_the_day(s: Str, pos: Int, capitals: Bool) -> Result<(Int, Int), 
 
 // The date the collected fields name.
 //
-// An ISO week beats a day of the year, which beats the month and the
-// day, because that is the order of how much a format had to say to
-// produce one.
+// An ISO week takes precedence over a day of the year, which takes
+// precedence over the month and the day.  That is the order of how much
+// a format had to say to produce each one.
 fn read_date(year: Int, month: Int, day: Int, ordinal: Int, week: Int,
              weekday: Int) -> Result<CivilDate, CalError>
     if week != 0
@@ -537,8 +533,8 @@ fn read_hour(hour: Int, half: Int) -> Int
 // The year a two-digit `%y` names, under the POSIX rule: `69 ..= 99`
 // is the twentieth century and `00 ..= 68` the twenty-first.
 //
-// A rule rather than a guess, and the reason `%y` is the directive to
-// avoid in anything that has to still be right in 2069.
+// It is a rule rather than a guess, and it is the reason to avoid `%y`
+// in anything that has to still be right in 2069.
 fn within_the_nearest_century(v: Int) -> Int
     if v < 69
         2000 + v

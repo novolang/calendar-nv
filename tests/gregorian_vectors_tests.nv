@@ -1,17 +1,17 @@
 // gregorian_vectors_tests.nv — the proleptic Gregorian calendar
 // checked against published values rather than against itself.
 //
-// The oracle is the rule, not this package: the day numbers are Howard
-// Hinnant's `days_from_civil` worked examples, the weekdays and ISO
-// week numbers are the ones Python's `datetime.date` answers for the
-// same dates, and the leap years are the century rule's own examples.
-// Every case here names the date in the text so a reader can check one
-// line against any other implementation.
+// The expected values come from outside this package.  The day numbers
+// are Howard Hinnant's `days_from_civil` worked examples.  The weekdays
+// and ISO week numbers are the ones Python's `datetime.date` answers
+// for the same dates.  The leap years are the century rule's own
+// examples.  Every case names the date in its text, so a reader can
+// check one line against any other implementation.
 //
-// The four dates worth knowing: 1970-01-01 is day 0 and a Thursday,
-// 0001-01-01 is day -719162 and a Monday, 9999-12-31 is day 2932896
-// and a Friday, and 2000-02-29 is a date while 1900-02-29 and
-// 2100-02-29 are not.
+// Four dates are worth knowing.  1970-01-01 is day 0 and a Thursday.
+// 0001-01-01 is day -719162 and a Monday.  9999-12-31 is day 2932896
+// and a Friday.  2000-02-29 is a date, while 1900-02-29 and 2100-02-29
+// are not.
 
 use std.test
 use civil

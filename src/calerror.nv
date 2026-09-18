@@ -1,29 +1,27 @@
 // calerror.nv — the two ways a calendar refuses: the value does not
 // exist, or the text does not say what it claims to.
 //
-// WHY THERE IS AN ERROR TYPE AT ALL
+// There is an error type because `2023-02-29` is not a date.  A library
+// that answers it decides something on the caller's behalf that the
+// caller did not ask it to decide, whether it rolls to the 1st of
+// March, clamps to the 28th or answers the 29th of a month with 28
+// days.  The decision surfaces months later in somebody's billing run.
+// So construction validates, and the reason it refuses names the
+// numbers it saw.
 //
-// `2023-02-29` is not a date.  A library that answers it — by rolling
-// to March 1, by clamping to the 28th, by returning the 29th of a
-// month that has 28 days — has decided something on the caller's
-// behalf that the caller did not ask it to decide, and the decision
-// surfaces months later in somebody's billing run.  So construction
-// validates, and the reason it refuses names the numbers it saw.
+// The parse half is the same one layer up.  An ISO 8601 string is
+// either a date or it is text.  A caller reading a file somebody else
+// produced needs the offset of the byte that stopped the parse rather
+// than the word "invalid".  An offset here is a 0-based index into the
+// input string, because that is what a caller slices with.
 //
-// The parse half is the same argument one layer up: an ISO 8601 string
-// is either a date or it is text, and a caller who is reading a file
-// somebody else produced needs the OFFSET of the byte that stopped the
-// parse, not the word "invalid".  Offsets here are 0-based indices into
-// the input string, because that is what a caller slices with.
-//
-// WHAT IS NOT AN ERROR
-//
-// A date before 1583 is not an error, and neither is a negative year.
-// This package is proleptic Gregorian all the way down, like chrono's
-// `NaiveDate` and like Python's `datetime.date`: the calendar rules are
-// applied backwards past the point history adopted them, because the
-// alternative is arithmetic that changes shape in the middle and a
-// difference between two dates that nobody can compute.
+// Two things are not errors.  A date before 1583 is not one, and
+// neither is a negative year.  This package is proleptic Gregorian all
+// the way down, like chrono's `NaiveDate` and like Python's
+// `datetime.date`.  The calendar rules are applied backwards past the
+// point history adopted them, because the alternative is arithmetic
+// that changes shape in the middle and a difference between two dates
+// that nobody can compute.
 
 // Why a calendar value could not be built, or a string could not be
 // read.
@@ -40,7 +38,7 @@
 // ```
 pub enum CalError
     // The day is not in that month of that year.  `2023-02-29` and
-    // `2026-04-31` both land here; the year is carried because
+    // `2026-04-31` both land here.  The year is carried because
     // February's answer depends on it.
     DayOutOfRange(y: Int, m: Int, d: Int)
     // The month is not in `1 ..= 12`.
@@ -74,7 +72,7 @@ pub enum CalError
     // problems.
     TrailingText(at: Int)
     // A format string named a directive this package does not
-    // implement.  `at` is the offset of the `%`; `directive` is the
+    // implement.  `at` is the offset of the `%`.  `directive` is the
     // two characters as written, so the message can show them.
     UnknownDirective(at: Int, directive: Str)
     // The arithmetic left the range this package represents: a year
@@ -89,8 +87,7 @@ pub enum CalError
 // carries, so that a program can print this and nothing else and still
 // have told somebody enough to fix their file.
 //
-// `Result<T, CalError>` requires it (SPEC § 3.4), so the impl exists
-// whether or not an interface release has anything to say yet.
+// `Result<T, CalError>` requires it (SPEC § 3.4).
 impl Error for CalError
     // One sentence per variant, quoting whatever the variant carries.
     fn message(self) -> Str
@@ -109,7 +106,7 @@ impl Error for CalError
 // The 0-based byte offset in the input this error is about, or `-1`
 // when it is not about a piece of text.
 //
-// The five range variants answer `-1`: they are about numbers a caller
+// The five range variants answer `-1`.  They are about numbers a caller
 // passed in, and there is no string to point at.  The four parse
 // variants answer a real offset, which is what lets a caller print the
 // input with a caret under the byte that stopped it.

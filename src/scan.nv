@@ -1,13 +1,12 @@
 // scan.nv — the byte-level reading and writing both formatters share.
 //
-// Nothing here is public: § 9.2 of the specification makes a
-// declaration without `pub` package-internal, so `iso8601` and
-// `strfmt` both see these and no consumer of the package does.  They
-// are in one module rather than two copies because a parser that reads
-// "two digits" differently in two places is a parser with two
-// grammars.
+// Nothing here is public.  Section 9.2 of the specification makes a
+// declaration without `pub` package-internal, so `iso8601` and `strfmt`
+// both see these and no consumer of the package does.  They are in one
+// module rather than in two copies, because a parser that reads "two
+// digits" differently in two places is a parser with two grammars.
 //
-// Every reader is TOTAL over the string.  A scan past the end answers
+// Every reader is total over the string.  A scan past the end answers
 // `-1` rather than an optional, so the shape of a parse is a chain of
 // comparisons and the offset arithmetic stays visible.
 

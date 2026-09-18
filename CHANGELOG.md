@@ -5,11 +5,14 @@ All notable changes to calendar-nv are recorded here. The format is
 package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 with the pre-1.0 rule that a breaking change bumps the MINOR number.
 
+## 0.1.1 — 2026-09-18
+
+The documentation and comments in plain prose; no signature changed.
+
 ## 0.1.0 — 2026-09-18
 
-**The first implementation of the interface published as 0.0.1.**
-Every `pub fn` has a body, the four API suites that were red by design
-are green, and six more suites are added beside them.
+Civil dates, spans, arithmetic, ISO 8601 and strftime, with ten test
+suites beside them.
 
 ### Breaking
 
@@ -19,8 +22,7 @@ are green, and six more suites are added beside them.
   `str.from_char`, reads its argument as a Unicode code point: a
   format string holding any character above U+007F would come back
   with a replacement character where each of its bytes was. No
-  signature changed, and a program written against 0.0.1 compiles
-  against this release on a 0.9.1 toolchain.
+  signature changed.
 
 ### Added
 
@@ -51,22 +53,20 @@ are green, and six more suites are added beside them.
   run with the heap untouched. No field name, no field type and no
   function signature changed, and a `@value` struct cannot change the
   meaning of a program the compiler accepts.
-- `stability` is `experimental` and the version is 0.1.0, which is what
-  a release with bodies in it must be.
-- The README no longer carries the interface-only stamp. It states what
-  is implemented, what the test suites assert, and the one cost a
-  caller should know about: a function answering a `Result` allocates
-  one heap cell for the answer, on the `Ok` path as well as the `Err`
-  one.
+- `stability` is `experimental`: the signatures may still move while
+  the packages built on this one are written.
+- A function that answers a `Result` allocates one heap cell for the
+  answer, on the `Ok` path as well as the `Err` one, because a `Result`
+  is an enum and an enum is a heap cell. The README names the functions
+  that answer a plain value instead.
 
 ### Known
 
-- `strfmt.parse` reads `%B` and `%b` as the month, not only as a name
-  checked for consistency. The comment at the top of `src/strfmt.nv`
-  grouped `%B` with `%A`, which contributes nothing a date can be built
-  from; a month name does contribute one, and `"%B %d %Y"` would
-  otherwise have been refused for naming no month. `%A` and `%a` are
-  still read and checked against the date and contribute nothing.
+- `strfmt.parse` reads `%B` and `%b` as the month rather than only as a
+  name checked against the date. A month name names a month, so
+  `"%B %d %Y"` is a format that determines a date. `%A` and `%a` are
+  read and checked against the date and contribute nothing a date can
+  be built from.
 - `src/scan.nv` is a new module and is package-internal: nothing in it
   is `pub`, so it is not part of the public interface (SPEC section
   9.2). It holds the byte readers `iso8601` and `strfmt` share.
@@ -81,10 +81,8 @@ are green, and six more suites are added beside them.
 
 ## [0.0.1] — 2026-09-09
 
-**The interface, published before anyone implements it.** Every public
-type and function carries its full signature, its effect row and its
-doc comment; every body is `todo()`; the release is recorded
-`implemented = false`.
+The declarations: every public type and function with its full
+signature, its effect row and its doc comment, and no function bodies.
 
 ### Added
 
@@ -120,7 +118,3 @@ doc comment; every body is `todo()`; the release is recorded
   `TimeDelta` rather than `Date`, `Time`, `DateTime` and `Duration`:
   three of those four are standard-library struct names, and a package
   that redeclares one does not compile. The README has the table.
-- `novo test` is red, and that is the release's expected state: every
-  assertion in the API suite reaches
-  `not implemented: calendar-nv.<fn>`. Run it with `--isolate` for one
-  verdict per test naming the function it stopped at.

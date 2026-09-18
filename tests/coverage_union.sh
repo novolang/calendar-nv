@@ -3,15 +3,15 @@
 # tests/coverage_union.sh — one line-coverage number for src/.
 #
 # `novo test --cov` measures one suite file at a time, and this package
-# has ten of them, so no single run answers "what fraction of src/ does
-# the suite cover".  This script unions the runs.
+# has ten of them, so no single run answers what fraction of src/ the
+# tests cover.  This script unions the runs.
 #
 # A line is uncovered overall exactly when every suite reports it
-# uncovered, so the answer is the INTERSECTION of the per-suite
-# uncovered sets.  The denominator — every instrumented line in src/ —
-# is measured by running a package whose only test touches nothing, so
-# that every src line comes back uncovered and the list is the whole
-# universe.
+# uncovered, so the answer is the intersection of the per-suite
+# uncovered sets.  The denominator is every instrumented line in src/.
+# It is measured by running a package whose only test touches nothing,
+# so that every line of src/ comes back uncovered and the list is the
+# whole of it.
 #
 # Usage: bash tests/coverage_union.sh [path-to-novo]
 

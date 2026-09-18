@@ -1,20 +1,19 @@
-// arith_tests.nv — the API suite for moving a date, and for the rule
-// that makes it ambiguous.
+// arith_tests.nv — the suite for moving a date, and for the rule that
+// makes it ambiguous.
 //
-// RED ON PURPOSE: every body is a `todo()`.  Run with `--isolate` for
-// one verdict per `@test`.
+// `test_the_end_of_month_rule` and the two cases below it are the ones
+// worth reading.  They are the written form of the end-of-month rule,
+// which is the decision this part of the package turns on.
 //
-// `test_the_end_of_month_rule` and the two below it are the ones worth
-// reading: they are the written form of the decision the README calls
-// this package's load-bearing interface, and they are what a body will
-// be judged against.
+// `novo test tests/arith_tests.nv --isolate` gives one verdict per
+// `@test`.
 
 use std.test
 use arith
 use civil
 use span
 
-// Fixture builders — the note is in tests/civil_tests.nv.
+// Fixture builders.  The note on them is in tests/civil_tests.nv.
 fn day(y: Int, m: Int, d: Int) -> CivilDate
     civil.date(y, m, d)!
 

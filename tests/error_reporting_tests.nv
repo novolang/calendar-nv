@@ -1,13 +1,13 @@
 // error_reporting_tests.nv — what a refusal says, and where it points.
 //
 // A calendar library is read by somebody holding a file they did not
-// write, and the two questions they have are "what is wrong" and
-// "where".  So both halves of `CalError` are asserted here: the
-// sentence every variant produces, which is what a program prints when
-// it prints nothing else, and the offset, which is what lets it print
+// write, and their two questions are "what is wrong" and "where".  Both
+// halves of `CalError` are asserted here.  The first is the sentence
+// every variant produces, which is what a program prints when it prints
+// nothing else.  The second is the offset, which is what lets it print
 // the input with a caret under the byte that stopped the parse.
 //
-// The rule the offsets follow: the five range variants are about
+// The offsets follow one rule.  The five range variants are about
 // numbers a caller passed in and answer `-1`, and the four parse
 // variants answer a real index into the input.
 

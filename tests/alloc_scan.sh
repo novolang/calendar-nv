@@ -4,24 +4,24 @@
 #
 # `novo build` writes a module's LLVM to `_novo/<name>.ll` before it
 # invokes clang, so the IR is there to read.  `--opt=0` keeps the
-# functions separate: at the default optimisation level the whole probe
+# functions separate.  At the default optimisation level the whole probe
 # inlines into `novo_main`, there is nothing left to attribute an
 # allocation to, and an assertion that no core function allocates would
 # pass because no core function is there.
 #
-# WHAT IS ASSERTED, AND WHAT IS NOT.  The list below is every function
-# that answers a plain value — an `Int`, a `Bool`, a `CivilDate`, a
-# `TimeDelta`, a `Weekday`.  Those are `@value` structs and primitives,
-# so they live on the stack and the heap is never touched.
+# The list below is every function that answers a plain value.  That is
+# an `Int`, a `Bool`, a `CivilDate`, a `TimeDelta` or a `Weekday`.
+# Those are `@value` structs and primitives, so they live on the stack
+# and the heap is never touched.
 #
-# The functions that answer a `Result` are NOT on the list, and the
-# measured reason is worth writing down: `Result` is an enum, an enum
-# is a heap cell, and the cell is allocated on the `Ok` path as well as
-# the `Err` one.  So `civil.date(2026, 3, 15)` costs one allocation for
-# the answer whatever the answer is.  That is a property of the
-# language rather than of this package — there is no value-typed enum —
-# and it is the reason a caller who is moving a date in a loop reaches
-# for `civil.epoch_day`, `arith.days_between` and
+# The functions that answer a `Result` are left off the list, and the
+# reason is worth writing down.  A `Result` is an enum, an enum is a
+# heap cell, and the cell is allocated on the `Ok` path as well as the
+# `Err` one.  So `civil.date(2026, 3, 15)` costs one allocation for the
+# answer whatever the answer is.  That is a property of the language
+# rather than of this package, because there is no value-typed enum.  It
+# is the reason a caller moving a date in a loop reaches for
+# `civil.epoch_day`, `arith.days_between` and
 # `civil.date_from_epoch_day`, which are on the list.
 #
 # Usage: bash tests/alloc_scan.sh [path-to-novo]
