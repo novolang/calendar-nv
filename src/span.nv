@@ -41,7 +41,8 @@
 //     let d = span.hours(2)
 //     println("${span.as_seconds(d)}")            // 7200
 // ```
-pub struct TimeDelta
+pub @value
+struct TimeDelta
     // Whole seconds, signed.  The sign of the whole value.
     secs: Int
     // `0 ..= 999_999_999`, always non-negative — see the module note
@@ -57,7 +58,12 @@ pub struct TimeDelta
 //     println("${span.nanoseconds(1500000000).secs}")     // 1
 // ```
 pub fn nanoseconds(n: Int) -> TimeDelta
-    todo("calendar-nv.nanoseconds")
+    let s = n / 1000000000
+    let r = n % 1000000000
+    if r < 0
+        TimeDelta { secs: s - 1, nanos: r + 1000000000 }
+    else
+        TimeDelta { secs: s, nanos: r }
 
 // A length in milliseconds.
 //
@@ -68,7 +74,12 @@ pub fn nanoseconds(n: Int) -> TimeDelta
 //     println("${span.milliseconds(1500).secs}")          // 1
 // ```
 pub fn milliseconds(n: Int) -> TimeDelta
-    todo("calendar-nv.milliseconds")
+    let s = n / 1000
+    let r = n % 1000
+    if r < 0
+        TimeDelta { secs: s - 1, nanos: (r + 1000) * 1000000 }
+    else
+        TimeDelta { secs: s, nanos: r * 1000000 }
 
 // A length in seconds.
 //
@@ -79,7 +90,7 @@ pub fn milliseconds(n: Int) -> TimeDelta
 //     println("${span.seconds(90).secs}")                 // 90
 // ```
 pub fn seconds(n: Int) -> TimeDelta
-    todo("calendar-nv.seconds")
+    TimeDelta { secs: n, nanos: 0 }
 
 // A length in minutes.
 //
@@ -90,7 +101,7 @@ pub fn seconds(n: Int) -> TimeDelta
 //     println("${span.as_seconds(span.minutes(90))}")     // 5400
 // ```
 pub fn minutes(n: Int) -> TimeDelta
-    todo("calendar-nv.minutes")
+    TimeDelta { secs: n * 60, nanos: 0 }
 
 // A length in hours.
 //
@@ -101,7 +112,7 @@ pub fn minutes(n: Int) -> TimeDelta
 //     println("${span.as_seconds(span.hours(1))}")        // 3600
 // ```
 pub fn hours(n: Int) -> TimeDelta
-    todo("calendar-nv.hours")
+    TimeDelta { secs: n * 3600, nanos: 0 }
 
 // A length in days, where a day is exactly 86,400 seconds.
 //
@@ -119,7 +130,7 @@ pub fn hours(n: Int) -> TimeDelta
 //     println("${span.as_seconds(span.days(1))}")         // 86400
 // ```
 pub fn days(n: Int) -> TimeDelta
-    todo("calendar-nv.days")
+    TimeDelta { secs: n * 86400, nanos: 0 }
 
 // Whole seconds, truncated toward negative infinity.
 //
@@ -136,7 +147,7 @@ pub fn days(n: Int) -> TimeDelta
 //     println("${span.as_seconds(span.milliseconds(-1500))}")   // -2
 // ```
 pub fn as_seconds(d: TimeDelta) -> Int
-    todo("calendar-nv.as_seconds")
+    d.secs
 
 // The nanosecond part, `0 ..= 999_999_999`.
 //
@@ -151,7 +162,7 @@ pub fn as_seconds(d: TimeDelta) -> Int
 //     println("${span.subsec_nanos(span.milliseconds(-1500))}")  // 500000000
 // ```
 pub fn subsec_nanos(d: TimeDelta) -> Int
-    todo("calendar-nv.subsec_nanos")
+    d.nanos
 
 // The sum.
 //
@@ -169,7 +180,13 @@ pub fn subsec_nanos(d: TimeDelta) -> Int
 //         Err(_) => println("overflow")
 // ```
 pub fn add(a: TimeDelta, b: TimeDelta) -> Result<TimeDelta, CalError>
-    todo("calendar-nv.add")
+    let n = a.nanos + b.nanos
+    let carry = if n >= 1000000000
+        1
+    else
+        0
+    let s = add_secs(a.secs, b.secs)!
+    Ok(TimeDelta { secs: add_secs(s, carry)!, nanos: n - carry * 1000000000 })
 
 // The difference, `a - b`.
 //
@@ -182,7 +199,13 @@ pub fn add(a: TimeDelta, b: TimeDelta) -> Result<TimeDelta, CalError>
 //         Err(_) => println("overflow")
 // ```
 pub fn sub(a: TimeDelta, b: TimeDelta) -> Result<TimeDelta, CalError>
-    todo("calendar-nv.sub")
+    let n = a.nanos - b.nanos
+    let borrow = if n < 0
+        1
+    else
+        0
+    let s = sub_secs(a.secs, b.secs)!
+    Ok(TimeDelta { secs: sub_secs(s, borrow)!, nanos: n + borrow * 1000000000 })
 
 // The same length with the opposite sign.
 //
@@ -195,7 +218,7 @@ pub fn sub(a: TimeDelta, b: TimeDelta) -> Result<TimeDelta, CalError>
 //         Err(_) => println("overflow")
 // ```
 pub fn negate(d: TimeDelta) -> Result<TimeDelta, CalError>
-    todo("calendar-nv.negate")
+    sub(TimeDelta { secs: 0, nanos: 0 }, d)
 
 // The magnitude: the same length, never negative.
 //
@@ -208,7 +231,10 @@ pub fn negate(d: TimeDelta) -> Result<TimeDelta, CalError>
 //         Err(_) => println("overflow")
 // ```
 pub fn magnitude(d: TimeDelta) -> Result<TimeDelta, CalError>
-    todo("calendar-nv.magnitude")
+    if is_negative(d)
+        negate(d)
+    else
+        Ok(d)
 
 // Whether the length is less than zero.
 //
@@ -219,7 +245,7 @@ pub fn magnitude(d: TimeDelta) -> Result<TimeDelta, CalError>
 //     println("${span.is_negative(span.seconds(-1))}")    // true
 // ```
 pub fn is_negative(d: TimeDelta) -> Bool
-    todo("calendar-nv.is_negative")
+    d.secs < 0
 
 // `-1`, `0` or `1` as `a` is shorter than, equal to, or longer than
 // `b`.  Signed, so `-1 hour` compares less than `1 second`.
@@ -231,4 +257,49 @@ pub fn is_negative(d: TimeDelta) -> Bool
 //     println("${span.compare(span.hours(-1), span.seconds(1))}")  // -1
 // ```
 pub fn compare(a: TimeDelta, b: TimeDelta) -> Int
-    todo("calendar-nv.compare")
+    let c = compare_int(a.secs, b.secs)
+    if c != 0
+        c
+    else
+        compare_int(a.nanos, b.nanos)
+
+// The largest `Int` (SPEC § 13.2).
+//
+// The overflow cases below answer a `Result` rather than trapping, so
+// the bound has to be a value this module can compare against.
+fn int_max() -> Int
+    9223372036854775807
+
+// The most negative `Int`.
+//
+// Written as a subtraction because the magnitude is one above
+// `int_max` and the lexer refuses a literal that large: the minus in
+// front of a number is a prefix operator, not part of the number
+// (SPEC § 13.5).
+fn int_min() -> Int
+    -9223372036854775807 - 1
+
+// `a + b`, or `Overflow` when the sum leaves the range of an `Int`.
+fn add_secs(a: Int, b: Int) -> Result<Int, CalError>
+    if b > 0 and a > int_max() - b
+        return Err(Overflow("a TimeDelta of more seconds than an Int holds"))
+    if b < 0 and a < int_min() - b
+        return Err(Overflow("a TimeDelta of more seconds than an Int holds"))
+    Ok(a + b)
+
+// `a - b`, or `Overflow` when the difference leaves the range.
+fn sub_secs(a: Int, b: Int) -> Result<Int, CalError>
+    if b < 0 and a > int_max() + b
+        return Err(Overflow("a TimeDelta of more seconds than an Int holds"))
+    if b > 0 and a < int_min() + b
+        return Err(Overflow("a TimeDelta of more seconds than an Int holds"))
+    Ok(a - b)
+
+// `-1`, `0` or `1` as `a` is below, equal to, or above `b`.
+fn compare_int(a: Int, b: Int) -> Int
+    if a < b
+        -1
+    elif a > b
+        1
+    else
+        0

@@ -42,7 +42,10 @@
 // format string that does not determine a date — no year, or no day —
 // is `BadFormat` before any input is read.
 
+use std.list
+use std.str
 use civil
+use scan
 
 // The date-time rendered through a format string.
 //
@@ -62,7 +65,23 @@ use civil
 //         Err(_) => println("bad format")
 // ```
 pub fn format(dt: CivilDateTime, fmt: Str) -> Result<Str, CalError>
-    todo("calendar-nv.format")
+    var out = ""
+    var skip = false
+    for i in 0..str.len(fmt)
+        if skip
+            skip = false
+        elif scan.at(fmt, i) != 37   // not a '%'
+            out = "${out}${str.from_byte(scan.at(fmt, i))}"
+        elif i + 1 >= str.len(fmt)
+            return Err(BadFormat(i, "a directive after the '%'"))
+        else
+            match directive(dt, scan.at(fmt, i + 1))
+                Some(piece) =>
+                    out = "${out}${piece}"
+                None        =>
+                    return Err(UnknownDirective(i, "%${str.from_byte(scan.at(fmt, i + 1))}"))
+            skip = true
+    Ok(out)
 
 // A date-time read back out of a string that has the given shape.
 //
@@ -86,7 +105,124 @@ pub fn format(dt: CivilDateTime, fmt: Str) -> Result<Str, CalError>
 //         Err(_) => println("did not match")
 // ```
 pub fn parse(s: Str, fmt: Str) -> Result<CivilDateTime, CalError>
-    todo("calendar-nv.parse")
+    check_format(fmt)!
+    var year = 0
+    var month = 1
+    var day = 1
+    var ordinal = 0
+    var week = 0
+    var hour = 0
+    var minute = 0
+    var second = 0
+    var nano = 0
+    var weekday = 0
+    var half = 0
+    var pos = 0
+    var skip = false
+    for i in 0..str.len(fmt)
+        if skip
+            skip = false
+        elif scan.at(fmt, i) != 37   // not a '%'
+            if scan.at(s, pos) != scan.at(fmt, i)
+                return Err(scan.need(s, pos, "the literal the format has here"))
+            pos = pos + 1
+        else
+            let code = scan.at(fmt, i + 1)
+            skip = true
+            if code == 89 or code == 71   // 'Y' or 'G'
+                let (v, p) = scan.signed_run(s, pos, "a year")!
+                year = v
+                pos = p
+            elif code == 121   // 'y'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit year")!
+                year = within_the_nearest_century(v)
+                pos = p
+            elif code == 109   // 'm'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit month")!
+                month = v
+                pos = p
+            elif code == 100   // 'd'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit day")!
+                day = v
+                pos = p
+            elif code == 101   // 'e'
+                let start = if scan.at(s, pos) == 32
+                    pos + 1
+                else
+                    pos
+                let (v, p) = scan.bounded(s, start, 1, 2, "a day of the month")!
+                day = v
+                pos = p
+            elif code == 106   // 'j'
+                let (v, p) = scan.bounded(s, pos, 3, 3, "a three-digit day of the year")!
+                ordinal = v
+                pos = p
+            elif code == 86   // 'V'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit ISO week")!
+                week = v
+                pos = p
+            elif code == 72   // 'H'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit hour")!
+                hour = v
+                pos = p
+            elif code == 73   // 'I'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit hour")!
+                hour = v
+                pos = p
+            elif code == 77   // 'M'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit minute")!
+                minute = v
+                pos = p
+            elif code == 83   // 'S'
+                let (v, p) = scan.bounded(s, pos, 2, 2, "a two-digit second")!
+                second = v
+                pos = p
+            elif code == 102   // 'f'
+                let (v, p) = scan.bounded(s, pos, 9, 9, "nine digits of nanoseconds")!
+                nano = v
+                pos = p
+            elif code == 117   // 'u'
+                let (v, p) = scan.bounded(s, pos, 1, 1, "an ISO weekday digit")!
+                weekday = v
+                pos = p
+            elif code == 112 or code == 80   // 'p' or 'P'
+                let (v, p) = read_half_of_the_day(s, pos, code == 112)!
+                half = v
+                pos = p
+            elif code == 65 or code == 97   // 'A' or 'a'
+                let (v, p) = read_weekday(s, pos, code == 97)!
+                weekday = v
+                pos = p
+            elif code == 66 or code == 98   // 'B' or 'b'
+                let (v, p) = read_month(s, pos, code == 98)!
+                month = v
+                pos = p
+            elif code == 70   // 'F'
+                let (y2, p1) = scan.signed_run(s, pos, "a year")!
+                let (m2, p2) = after_dash(s, p1, "a two-digit month")!
+                let (d2, p3) = after_dash(s, p2, "a two-digit day")!
+                year = y2
+                month = m2
+                day = d2
+                pos = p3
+            elif code == 84   // 'T'
+                let (h2, p1) = scan.bounded(s, pos, 2, 2, "a two-digit hour")!
+                let (mi2, p2) = after_colon(s, p1, "a two-digit minute")!
+                let (s2, p3) = after_colon(s, p2, "a two-digit second")!
+                hour = h2
+                minute = mi2
+                second = s2
+                pos = p3
+            else
+                if scan.at(s, pos) != 37   // '%'
+                    return Err(scan.need(s, pos, "a '%'"))
+                pos = pos + 1
+    if pos != str.len(s)
+        return Err(TrailingText(pos))
+    let d = read_date(year, month, day, ordinal, week, weekday)!
+    if weekday != 0 and week == 0 and civil.weekday_number(civil.weekday(d)) != weekday
+        return Err(BadFormat(0, "a weekday name that matches the date"))
+    Ok(civil.datetime(d, civil.time_of(read_hour(hour, half), minute, second, nano)!))
 
 // Every directive this module implements, as two-character strings —
 // `["%Y", "%y", "%m", …]` — in the order of the table above.
@@ -103,4 +239,305 @@ pub fn parse(s: Str, fmt: Str) -> Result<CivilDateTime, CalError>
 //     println("${list.len(strfmt.directives())}")
 // ```
 pub fn directives() -> [Str]
-    todo("calendar-nv.directives")
+    ["%Y",
+        "%y",
+        "%m",
+        "%d",
+        "%e",
+        "%j",
+        "%H",
+        "%I",
+        "%M",
+        "%S",
+        "%f",
+        "%p",
+        "%P",
+        "%A",
+        "%a",
+        "%B",
+        "%b",
+        "%u",
+        "%G",
+        "%V",
+        "%F",
+        "%T",
+        "%%"]
+
+// The text one directive stands for, or `None` when the byte after the
+// `%` is not a directive this module implements.
+//
+// This chain is the table at the top of the module, and `directives`
+// is the same table as a list; a test asserts that every entry of the
+// list formats through this function, which is what keeps the two in
+// step.
+fn directive(dt: CivilDateTime, code: Int) -> ?Str
+    let d = dt.date
+    let t = dt.time
+    if code == 89   // 'Y'
+        Some(year_text(d.year))
+    elif code == 121   // 'y'
+        Some(scan.pad2(within_century(d.year)))
+    elif code == 109   // 'm'
+        Some(scan.pad2(d.month))
+    elif code == 100   // 'd'
+        Some(scan.pad2(d.day))
+    elif code == 101   // 'e'
+        Some(str.pad_left("${d.day}", 2, " "))
+    elif code == 106   // 'j'
+        Some(str.pad_left("${civil.day_of_year(d)}", 3, "0"))
+    elif code == 72   // 'H'
+        Some(scan.pad2(t.hour))
+    elif code == 73   // 'I'
+        Some(scan.pad2(on_a_twelve_hour_clock(t.hour)))
+    elif code == 77   // 'M'
+        Some(scan.pad2(t.minute))
+    elif code == 83   // 'S'
+        Some(scan.pad2(t.second))
+    elif code == 102   // 'f'
+        Some(str.pad_left("${t.nano}", 9, "0"))
+    elif code == 112   // 'p'
+        Some(half_of_the_day(t.hour, true))
+    elif code == 80   // 'P'
+        Some(half_of_the_day(t.hour, false))
+    elif code == 65   // 'A'
+        Some(weekday_word(civil.weekday_number(civil.weekday(d)), false))
+    elif code == 97   // 'a'
+        Some(weekday_word(civil.weekday_number(civil.weekday(d)), true))
+    elif code == 66   // 'B'
+        Some(month_word(d.month, false))
+    elif code == 98   // 'b'
+        Some(month_word(d.month, true))
+    elif code == 117   // 'u'
+        Some("${civil.weekday_number(civil.weekday(d))}")
+    elif code == 71   // 'G'
+        Some(year_text(iso_year_of(d)))
+    elif code == 86   // 'V'
+        Some(scan.pad2(iso_week_of(d)))
+    elif code == 70   // 'F'
+        Some("${year_text(d.year)}-${scan.pad2(d.month)}-${scan.pad2(d.day)}")
+    elif code == 84   // 'T'
+        Some("${scan.pad2(t.hour)}:${scan.pad2(t.minute)}:${scan.pad2(t.second)}")
+    elif code == 37   // '%'
+        Some("%")
+    else
+        None
+
+// Whether a byte is a directive this module implements.
+//
+// Read off `directives`, so the list and the check cannot disagree.
+fn is_directive(code: Int) -> Bool
+    list.contains(directives(), "%${str.from_byte(code)}")
+
+// The year with at least four digits and a `-` when it is negative —
+// the spelling `iso8601.format_date` writes.
+fn year_text(y: Int) -> Str
+    if y < 0
+        "-${year_text(-y)}"
+    else
+        str.pad_left("${y}", 4, "0")
+
+// The year within its century, `0 ..= 99`, for a year of either sign.
+fn within_century(y: Int) -> Int
+    let r = y % 100
+    if r < 0
+        r + 100
+    else
+        r
+
+// The hour a twelve-hour clock shows: midnight and noon are both 12.
+fn on_a_twelve_hour_clock(hour: Int) -> Int
+    if hour == 0
+        12
+    elif hour > 12
+        hour - 12
+    else
+        hour
+
+// `AM` or `PM`, in capitals or not.
+fn half_of_the_day(hour: Int, capitals: Bool) -> Str
+    if hour < 12 and capitals
+        "AM"
+    elif hour < 12
+        "am"
+    elif capitals
+        "PM"
+    else
+        "pm"
+
+// The ISO 8601 week-numbering year of a date.
+fn iso_year_of(d: CivilDate) -> Int
+    let (y, _) = civil.iso_week(d)
+    y
+
+// The ISO 8601 week number of a date.
+fn iso_week_of(d: CivilDate) -> Int
+    let (_, w) = civil.iso_week(d)
+    w
+
+// A weekday name in the one locale, whole or in three letters.
+fn weekday_word(n: Int, short: Bool) -> Str
+    let name = match civil.weekday_of(n)
+        Mon => "Monday"
+        Tue => "Tuesday"
+        Wed => "Wednesday"
+        Thu => "Thursday"
+        Fri => "Friday"
+        Sat => "Saturday"
+        Sun => "Sunday"
+    if short
+        str.slice(name, 0, 3)
+    else
+        name
+
+// A month name in the one locale, whole or in three letters.
+fn month_word(m: Int, short: Bool) -> Str
+    let name = match m
+        1  => "January"
+        2  => "February"
+        3  => "March"
+        4  => "April"
+        5  => "May"
+        6  => "June"
+        7  => "July"
+        8  => "August"
+        9  => "September"
+        10 => "October"
+        11 => "November"
+        _  => "December"
+    if short
+        str.slice(name, 0, 3)
+    else
+        name
+
+// Which of the pieces of a date a directive contributes, as bits: 1 a
+// year, 2 a month, 4 a day of the month, 8 a day of the year, 16 an
+// ISO week.
+//
+// `0` for a directive that contributes nothing a date can be built
+// from — the weekday, every field of the time, and the literal `%`.
+fn contribution(code: Int) -> Int
+    if code == 89 or code == 121 or code == 71   // 'Y', 'y' or 'G'
+        1
+    elif code == 109 or code == 66 or code == 98   // 'm', 'B' or 'b'
+        2
+    elif code == 100 or code == 101   // 'd' or 'e'
+        4
+    elif code == 106   // 'j'
+        8
+    elif code == 86   // 'V'
+        16
+    elif code == 70   // 'F'
+        7
+    else
+        0
+
+// Whether a format string names enough to build a date, and whether
+// every directive in it is one this module implements.
+//
+// Checked BEFORE the input is read, because a format that cannot name
+// a day is the caller's mistake rather than their data's, and the
+// offsets a later refusal carries are offsets into the INPUT.
+fn check_format(fmt: Str) -> Result<Int, CalError>
+    var provides = 0
+    var skip = false
+    for i in 0..str.len(fmt)
+        if skip
+            skip = false
+        elif scan.at(fmt, i) == 37   // '%'
+            if i + 1 >= str.len(fmt)
+                return Err(BadFormat(i, "a directive after the '%'"))
+            let code = scan.at(fmt, i + 1)
+            if not is_directive(code)
+                return Err(UnknownDirective(i, "%${str.from_byte(code)}"))
+            provides = provides | contribution(code)
+            skip = true
+    if (provides & 1) == 0
+        return Err(BadFormat(0, "a directive naming the year"))
+    if (provides & 8) != 0 or (provides & 16) != 0 or (provides & 6) == 6
+        return Ok(provides)
+    Err(BadFormat(0, "a directive naming the day, with the month or as a day of the year"))
+
+// A `-` and then two digits.
+fn after_dash(s: Str, pos: Int, why: Str) -> Result<(Int, Int), CalError>
+    if scan.at(s, pos) != 45   // '-'
+        return Err(scan.need(s, pos, "a '-'"))
+    scan.bounded(s, pos + 1, 2, 2, why)
+
+// A `:` and then two digits.
+fn after_colon(s: Str, pos: Int, why: Str) -> Result<(Int, Int), CalError>
+    if scan.at(s, pos) != 58   // ':'
+        return Err(scan.need(s, pos, "a ':'"))
+    scan.bounded(s, pos + 1, 2, 2, why)
+
+// The name at `pos` and the ISO number of the weekday it names.
+fn read_weekday(s: Str, pos: Int, short: Bool) -> Result<(Int, Int), CalError>
+    var found = 0
+    var stop = pos
+    for n in 1..=7
+        let word = weekday_word(n, short)
+        if found == 0 and scan.matches_at(s, pos, word)
+            found = n
+            stop = pos + str.len(word)
+    if found == 0
+        return Err(scan.need(s, pos, "a weekday name"))
+    Ok((found, stop))
+
+// The name at `pos` and the number of the month it names.
+fn read_month(s: Str, pos: Int, short: Bool) -> Result<(Int, Int), CalError>
+    var found = 0
+    var stop = pos
+    for m in 1..=12
+        let word = month_word(m, short)
+        if found == 0 and scan.matches_at(s, pos, word)
+            found = m
+            stop = pos + str.len(word)
+    if found == 0
+        return Err(scan.need(s, pos, "a month name"))
+    Ok((found, stop))
+
+// `AM` or `PM` at `pos`, as `1` or `2`, in the case the directive asks
+// for.
+fn read_half_of_the_day(s: Str, pos: Int, capitals: Bool) -> Result<(Int, Int), CalError>
+    if scan.matches_at(s, pos, half_of_the_day(0, capitals))
+        return Ok((1, pos + 2))
+    if scan.matches_at(s, pos, half_of_the_day(12, capitals))
+        return Ok((2, pos + 2))
+    Err(scan.need(s, pos, "AM or PM"))
+
+// The date the collected fields name.
+//
+// An ISO week beats a day of the year, which beats the month and the
+// day, because that is the order of how much a format had to say to
+// produce one.
+fn read_date(year: Int, month: Int, day: Int, ordinal: Int, week: Int,
+             weekday: Int) -> Result<CivilDate, CalError>
+    if week != 0
+        let n = if weekday == 0
+            1
+        else
+            weekday
+        return civil.from_iso_week(year, week, civil.weekday_of(n))
+    if ordinal != 0
+        return civil.date_ordinal(year, ordinal)
+    civil.date(year, month, day)
+
+// The hour on a twenty-four hour clock, once `%p` has said which half
+// of the day a `%I` reading belongs to.
+fn read_hour(hour: Int, half: Int) -> Int
+    if half == 2 and hour < 12
+        hour + 12
+    elif half == 1 and hour == 12
+        0
+    else
+        hour
+
+// The year a two-digit `%y` names, under the POSIX rule: `69 ..= 99`
+// is the twentieth century and `00 ..= 68` the twenty-first.
+//
+// A rule rather than a guess, and the reason `%y` is the directive to
+// avoid in anything that has to still be right in 2069.
+fn within_the_nearest_century(v: Int) -> Int
+    if v < 69
+        2000 + v
+    else
+        1900 + v

@@ -1,0 +1,108 @@
+// scan.nv — the byte-level reading and writing both formatters share.
+//
+// Nothing here is public: § 9.2 of the specification makes a
+// declaration without `pub` package-internal, so `iso8601` and
+// `strfmt` both see these and no consumer of the package does.  They
+// are in one module rather than two copies because a parser that reads
+// "two digits" differently in two places is a parser with two
+// grammars.
+//
+// Every reader is TOTAL over the string.  A scan past the end answers
+// `-1` rather than an optional, so the shape of a parse is a chain of
+// comparisons and the offset arithmetic stays visible.
+
+use std.str
+
+// The byte at `i`, or `-1` past either end of the string.
+//
+// One reader for the whole package, so a scan past the end is an
+// ordinary comparison rather than an unwrap at every call site.
+fn at(s: Str, i: Int) -> Int
+    str.byte_at_or(s, i, -1)
+
+// Whether a byte is an ASCII digit.
+fn is_digit(b: Int) -> Bool
+    b >= 48 and b <= 57
+
+// The offset of the first byte at or after `i` that is not a digit.
+fn end_of_digits(s: Str, i: Int) -> Int
+    var j = i
+    for k in i..str.len(s)
+        if not is_digit(at(s, k))
+            break
+        j = k + 1
+    j
+
+// The decimal value of the digits in `s` over `[i, j)`.
+fn digits_value(s: Str, i: Int, j: Int) -> Int
+    var n = 0
+    for k in i..j
+        n = n * 10 + at(s, k) - 48
+    n
+
+// The refusal for a byte that is not what the grammar wanted.
+//
+// The end of the input is `Truncated` and anything else is
+// `BadFormat`, which is the distinction the error type exists to make.
+fn need(s: Str, i: Int, why: Str) -> CalError
+    if i >= str.len(s)
+        Truncated(str.len(s))
+    else
+        BadFormat(i, why)
+
+// Exactly `n` digits at `i`, as a number.
+fn fixed(s: Str, i: Int, n: Int, why: Str) -> Result<Int, CalError>
+    if i + n > str.len(s)
+        return Err(Truncated(str.len(s)))
+    if end_of_digits(s, i) < i + n
+        return Err(BadFormat(i, why))
+    Ok(digits_value(s, i, i + n))
+
+// A non-negative number as two digits.
+fn pad2(n: Int) -> Str
+    if n < 10
+        "0${n}"
+    else
+        "${n}"
+
+// `n` written with at least `width` digits, zero-padded on the left.
+fn pad_digits(n: Int, width: Int) -> Str
+    str.pad_left("${n}", width, "0")
+
+// The digits at `i`, at least `low` and at most `high` of them, with
+// the offset after them.
+//
+// The bounded form a format directive wants: `%d` reads two digits and
+// stops, even when the input has a third.
+fn bounded(s: Str, i: Int, low: Int, high: Int, why: Str) -> Result<(Int, Int), CalError>
+    let e = end_of_digits(s, i)
+    let stop = if e - i > high
+        i + high
+    else
+        e
+    if stop - i < low
+        return Err(need(s, i, why))
+    Ok((digits_value(s, i, stop), stop))
+
+// A run of digits at `i` with an optional leading `-`, and the offset
+// after it.
+//
+// The shape a year takes when its width is not fixed.
+fn signed_run(s: Str, i: Int, why: Str) -> Result<(Int, Int), CalError>
+    let neg = at(s, i) == 45   // a leading '-'
+    let start = if neg
+        i + 1
+    else
+        i
+    let (n, stop) = bounded(s, start, 1, 10, why)!
+    if neg
+        Ok((-n, stop))
+    else
+        Ok((n, stop))
+
+// Whether `word` is written at `i` in `s`.
+fn matches_at(s: Str, i: Int, word: Str) -> Bool
+    if i + str.len(word) > str.len(s)
+        false
+    else
+        str.slice(s, i, i + str.len(word)) == word

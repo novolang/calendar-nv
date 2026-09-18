@@ -49,7 +49,9 @@ use span
 //         Err(_) => println("overflow")
 // ```
 pub fn add_days(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
-    todo("calendar-nv.add_days")
+    if n < -day_span() or n > day_span()
+        return Err(Overflow("a count of days beyond the range of years"))
+    in_range(civil.date_from_epoch_day(civil.epoch_day(d) + n))
 
 // The date `n` months later, with the day clamped to the last day of
 // the target month.
@@ -68,7 +70,17 @@ pub fn add_days(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
 //         Err(_) => println("overflow")
 // ```
 pub fn add_months(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
-    todo("calendar-nv.add_months")
+    if n < -12 * day_span() / 30 or n > 12 * day_span() / 30
+        return Err(Overflow("a count of months beyond the range of years"))
+    let total = d.year * 12 + d.month - 1 + n
+    let y = floor_div(total, 12)
+    let m = total - y * 12 + 1
+    let last = civil.days_in_month(y, m)
+    let day = if d.day > last
+        last
+    else
+        d.day
+    in_range(CivilDate { year: y, month: m, day: day })
 
 // The date `n` years later, with the same clamp: the 29th of February
 // plus one year is the 28th.
@@ -86,7 +98,9 @@ pub fn add_months(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
 //         Err(_) => println("overflow")
 // ```
 pub fn add_years(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
-    todo("calendar-nv.add_years")
+    if n < -day_span() / 300 or n > day_span() / 300
+        return Err(Overflow("a count of years beyond the range of years"))
+    add_months(d, n * 12)
 
 // The date-time a length of time later, or earlier when the length is
 // negative.
@@ -109,7 +123,17 @@ pub fn add_years(d: CivilDate, n: Int) -> Result<CivilDate, CalError>
 //         Err(_) => println("overflow")
 // ```
 pub fn add_delta(dt: CivilDateTime, d: TimeDelta) -> Result<CivilDateTime, CalError>
-    todo("calendar-nv.add_delta")
+    let moved = span.as_seconds(d)
+    if moved < -second_span() or moved > second_span()
+        return Err(Overflow("a length of time beyond the range of years"))
+    // Both nanosecond fields are non-negative, so their sum carries
+    // upwards and never borrows.
+    let nanos = civil.nano_of_day(dt.time) + span.subsec_nanos(d)
+    let secs = civil.epoch_day(dt.date) * 86400 + moved + nanos / 1000000000
+    let day = floor_div(secs, 86400)
+    let sod = secs - day * 86400
+    let t = civil.time_of(sod / 3600, sod / 60 % 60, sod % 60, nanos % 1000000000)!
+    Ok(civil.datetime(in_range(civil.date_from_epoch_day(day))!, t))
 
 // Whole days from `a` to `b`, negative when `b` is earlier.
 //
@@ -127,7 +151,7 @@ pub fn add_delta(dt: CivilDateTime, d: TimeDelta) -> Result<CivilDateTime, CalEr
 //     println("${arith.days_between(a, b)}")      // 59
 // ```
 pub fn days_between(a: CivilDate, b: CivilDate) -> Int
-    todo("calendar-nv.days_between")
+    civil.epoch_day(b) - civil.epoch_day(a)
 
 // WHOLE months from `a` to `b`, truncated toward zero.
 //
@@ -148,7 +172,13 @@ pub fn days_between(a: CivilDate, b: CivilDate) -> Int
 //     println("${arith.months_between(a, b)}")    // 0
 // ```
 pub fn months_between(a: CivilDate, b: CivilDate) -> Int
-    todo("calendar-nv.months_between")
+    let months = (b.year - a.year) * 12 + b.month - a.month
+    if months > 0 and b.day < a.day
+        months - 1
+    elif months < 0 and b.day > a.day
+        months + 1
+    else
+        months
 
 // The exact length of time from `a` to `b`, negative when `b` is
 // earlier.
@@ -170,7 +200,9 @@ pub fn months_between(a: CivilDate, b: CivilDate) -> Int
 //         Err(_) => println("overflow")
 // ```
 pub fn between(a: CivilDateTime, b: CivilDateTime) -> Result<TimeDelta, CalError>
-    todo("calendar-nv.between")
+    let days = civil.epoch_day(b.date) - civil.epoch_day(a.date)
+    let nanos = civil.nano_of_day(b.time) - civil.nano_of_day(a.time)
+    span.add(span.days(days), span.nanoseconds(nanos))
 
 // The first day of this date's month.
 //
@@ -182,7 +214,7 @@ pub fn between(a: CivilDateTime, b: CivilDateTime) -> Result<TimeDelta, CalError
 //     println("${arith.start_of_month(civil.date(2026, 3, 15)!).day}")   // 1
 // ```
 pub fn start_of_month(d: CivilDate) -> CivilDate
-    todo("calendar-nv.start_of_month")
+    CivilDate { year: d.year, month: d.month, day: 1 }
 
 // The last day of this date's month: the 28th, 29th, 30th or 31st.
 //
@@ -197,4 +229,38 @@ pub fn start_of_month(d: CivilDate) -> CivilDate
 //     println("${arith.end_of_month(civil.date(2024, 2, 1)!).day}")      // 29
 // ```
 pub fn end_of_month(d: CivilDate) -> CivilDate
-    todo("calendar-nv.end_of_month")
+    CivilDate { year: d.year, month: d.month,
+                day: civil.days_in_month(d.year, d.month) }
+
+// One day more than the calendar this package represents holds.
+//
+// A count larger than this leaves the year range whatever date it
+// starts from, so it is refused BEFORE the addition rather than after:
+// the addition itself would trap on integer overflow, and a trap is
+// not the `Overflow` a caller asked to be told about.
+fn day_span() -> Int
+    400000000000
+
+// The same bound in seconds, for the one operation that moves a
+// date-time rather than a date.
+fn second_span() -> Int
+    day_span() * 86400
+
+// Division rounded toward negative infinity, for a positive divisor —
+// the same rule `civil` applies, kept private because a package's
+// public surface is its interface and this is arithmetic.
+fn floor_div(a: Int, b: Int) -> Int
+    let q = a / b
+    if a < 0 and q * b != a
+        q - 1
+    else
+        q
+
+// The date, or `Overflow` naming the range it left.
+//
+// Every operation in this module ends here, so the range is stated
+// once and the message is the same wherever a caller ran out of years.
+fn in_range(d: CivilDate) -> Result<CivilDate, CalError>
+    if d.year < -999999999 or d.year > 999999999
+        return Err(Overflow("a year outside -999_999_999 ..= 999_999_999"))
+    Ok(d)

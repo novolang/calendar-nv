@@ -44,7 +44,8 @@
 //         Ok(d)  => println("${d.year}-${d.month}-${d.day}")
 //         Err(_) => println("not a date")
 // ```
-pub struct CivilDate
+pub @value
+struct CivilDate
     // The proleptic Gregorian year.  Negative years are astronomical:
     // `0` is 1 BC and `-1` is 2 BC, which is what makes year
     // arithmetic a subtraction.
@@ -64,7 +65,8 @@ pub struct CivilDate
 //         Ok(t)  => println("${t.hour}:${t.minute}")
 //         Err(_) => println("not a time")
 // ```
-pub struct CivilTime
+pub @value
+struct CivilTime
     // `0 ..= 23`.  There is no 24:00; a caller who means the end of
     // the day means midnight of the next one, and saying so is the
     // caller's decision rather than this package's.
@@ -89,7 +91,8 @@ pub struct CivilTime
 //     let dt = civil.datetime(d, t)
 //     println("${dt.date.day} at ${dt.time.hour}")
 // ```
-pub struct CivilDateTime
+pub @value
+struct CivilDateTime
     // The day.
     date: CivilDate
     // The time of day on it.
@@ -160,7 +163,11 @@ pub enum Month
 //         Err(_) => println("refused")
 // ```
 pub fn date(y: Int, m: Int, d: Int) -> Result<CivilDate, CalError>
-    todo("calendar-nv.date")
+    if m < 1 or m > 12
+        return Err(MonthOutOfRange(m))
+    if d < 1 or d > days_in_month(y, m)
+        return Err(DayOutOfRange(y, m, d))
+    Ok(CivilDate { year: y, month: m, day: d })
 
 // A date from a year and a 1-based day of the year.
 //
@@ -176,7 +183,10 @@ pub fn date(y: Int, m: Int, d: Int) -> Result<CivilDate, CalError>
 //         Err(_) => println("not a day of that year")
 // ```
 pub fn date_ordinal(y: Int, ordinal: Int) -> Result<CivilDate, CalError>
-    todo("calendar-nv.date_ordinal")
+    if ordinal < 1 or ordinal > days_in_year(y)
+        return Err(OrdinalOutOfRange(y, ordinal))
+    let jan1 = epoch_day(CivilDate { year: y, month: 1, day: 1 })
+    Ok(date_from_epoch_day(jan1 + ordinal - 1))
 
 // The date a signed count of days from 1970-01-01 names.
 //
@@ -195,7 +205,23 @@ pub fn date_ordinal(y: Int, ordinal: Int) -> Result<CivilDate, CalError>
 //     println("${d.year}-${d.month}-${d.day}")     // 1970-1-1
 // ```
 pub fn date_from_epoch_day(days: Int) -> CivilDate
-    todo("calendar-nv.date_from_epoch_day")
+    // `civil_from_days`, with the era shifted so day 0 is 1970-01-01.
+    let z = days + 719468
+    let era = floor_div(z, 146097)
+    let doe = z - era * 146097
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    let mp = (5 * doy + 2) / 153
+    let d = doy - (153 * mp + 2) / 5 + 1
+    let m = if mp < 10
+        mp + 3
+    else
+        mp - 9
+    let y = yoe + era * 400
+    if m <= 2
+        CivilDate { year: y + 1, month: m, day: d }
+    else
+        CivilDate { year: y, month: m, day: d }
 
 // Days from 1970-01-01, negative before it.
 //
@@ -206,7 +232,22 @@ pub fn date_from_epoch_day(days: Int) -> CivilDate
 //     println("${civil.epoch_day(civil.date(1970, 1, 2)!)}")     // 1
 // ```
 pub fn epoch_day(d: CivilDate) -> Int
-    todo("calendar-nv.epoch_day")
+    // `days_from_civil`: March is the first month of the internal year,
+    // which is what makes the leap day the last day of it and the whole
+    // conversion a chain of divisions with no table.
+    let y = if d.month <= 2
+        d.year - 1
+    else
+        d.year
+    let era = floor_div(y, 400)
+    let yoe = y - era * 400
+    let mp = if d.month > 2
+        d.month - 3
+    else
+        d.month + 9
+    let doy = (153 * mp + 2) / 5 + d.day - 1
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    era * 146097 + doe - 719468
 
 // A time of day, or the reason those four numbers are not one.
 //
@@ -222,7 +263,11 @@ pub fn epoch_day(d: CivilDate) -> Int
 //         Err(_) => println("refused")
 // ```
 pub fn time_of(h: Int, minute: Int, s: Int, nano: Int) -> Result<CivilTime, CalError>
-    todo("calendar-nv.time_of")
+    if h < 0 or h > 23 or minute < 0 or minute > 59
+        return Err(TimeOutOfRange(h, minute, s, nano))
+    if s < 0 or s > 59 or nano < 0 or nano > 999999999
+        return Err(TimeOutOfRange(h, minute, s, nano))
+    Ok(CivilTime { hour: h, minute: minute, second: s, nano: nano })
 
 // Midnight: `00:00:00.000000000`.
 //
@@ -236,7 +281,7 @@ pub fn time_of(h: Int, minute: Int, s: Int, nano: Int) -> Result<CivilTime, CalE
 //     println("${civil.midnight().hour}")         // 0
 // ```
 pub fn midnight() -> CivilTime
-    todo("calendar-nv.midnight")
+    CivilTime { hour: 0, minute: 0, second: 0, nano: 0 }
 
 // A date and a time, together.
 //
@@ -252,7 +297,7 @@ pub fn midnight() -> CivilTime
 //     println("${dt.date.year}")
 // ```
 pub fn datetime(d: CivilDate, t: CivilTime) -> CivilDateTime
-    todo("calendar-nv.datetime")
+    CivilDateTime { date: d, time: t }
 
 // The day of the week this date falls on.
 //
@@ -265,7 +310,38 @@ pub fn datetime(d: CivilDate, t: CivilTime) -> CivilDateTime
 //         _   => println("some other day")
 // ```
 pub fn weekday(d: CivilDate) -> Weekday
-    todo("calendar-nv.weekday")
+    match weekday_index(epoch_day(d))
+        0 => Mon
+        1 => Tue
+        2 => Wed
+        3 => Thu
+        4 => Fri
+        5 => Sat
+        _ => Sun
+
+// The weekday an ISO 8601 day-of-week number names: `1` is Monday and
+// `7` is Sunday.
+//
+// The inverse of `weekday_number`, and the call a parser makes: an ISO
+// week date and a `%u` directive both arrive as a digit.  A number
+// outside `1 ..= 7` answers `Sun`, because the one caller that can
+// produce one has already refused it.
+//
+// ```novo
+// use civil
+//
+// fn main() [io]
+//     println("${civil.weekday_number(civil.weekday_of(3))}")     // 3
+// ```
+pub fn weekday_of(n: Int) -> Weekday
+    match n
+        1 => Mon
+        2 => Tue
+        3 => Wed
+        4 => Thu
+        5 => Fri
+        6 => Sat
+        _ => Sun
 
 // The ISO 8601 number of a weekday: Monday is 1, Sunday is 7.
 //
@@ -276,7 +352,14 @@ pub fn weekday(d: CivilDate) -> Weekday
 //     println("${civil.weekday_number(Sun)}")     // 7
 // ```
 pub fn weekday_number(w: Weekday) -> Int
-    todo("calendar-nv.weekday_number")
+    match w
+        Mon => 1
+        Tue => 2
+        Wed => 3
+        Thu => 4
+        Fri => 5
+        Sat => 6
+        Sun => 7
 
 // This date's month, as a name.
 //
@@ -289,7 +372,19 @@ pub fn weekday_number(w: Weekday) -> Int
 //         _   => println("not March")
 // ```
 pub fn month_of(d: CivilDate) -> Month
-    todo("calendar-nv.month_of")
+    match d.month
+        1  => Jan
+        2  => Feb
+        3  => Mar
+        4  => Apr
+        5  => May
+        6  => Jun
+        7  => Jul
+        8  => Aug
+        9  => Sep
+        10 => Oct
+        11 => Nov
+        _  => Dec
 
 // The number of a month: January is 1, December is 12.
 //
@@ -300,7 +395,19 @@ pub fn month_of(d: CivilDate) -> Month
 //     println("${civil.month_number(Dec)}")       // 12
 // ```
 pub fn month_number(m: Month) -> Int
-    todo("calendar-nv.month_number")
+    match m
+        Jan => 1
+        Feb => 2
+        Mar => 3
+        Apr => 4
+        May => 5
+        Jun => 6
+        Jul => 7
+        Aug => 8
+        Sep => 9
+        Oct => 10
+        Nov => 11
+        Dec => 12
 
 // The 1-based day of the year: 1 on the 1st of January, 365 or 366 on
 // the 31st of December.
@@ -312,7 +419,8 @@ pub fn month_number(m: Month) -> Int
 //     println("${civil.day_of_year(civil.date(2026, 3, 15)!)}")   // 74
 // ```
 pub fn day_of_year(d: CivilDate) -> Int
-    todo("calendar-nv.day_of_year")
+    let jan1 = epoch_day(CivilDate { year: d.year, month: 1, day: 1 })
+    epoch_day(d) - jan1 + 1
 
 // Whether a year has 366 days, under the proleptic Gregorian rule:
 // divisible by 4, except centuries, except centuries divisible by 400.
@@ -330,7 +438,7 @@ pub fn day_of_year(d: CivilDate) -> Int
 //     println("${civil.is_leap_year(1900)}")      // false
 // ```
 pub fn is_leap_year(y: Int) -> Bool
-    todo("calendar-nv.is_leap_year")
+    y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
 
 // How many days that month of that year has: 28, 29, 30 or 31, and `0`
 // for a month outside `1 ..= 12`.
@@ -346,7 +454,17 @@ pub fn is_leap_year(y: Int) -> Bool
 //     println("${civil.days_in_month(2024, 2)}")  // 29
 // ```
 pub fn days_in_month(y: Int, m: Int) -> Int
-    todo("calendar-nv.days_in_month")
+    if m == 2
+        if is_leap_year(y)
+            29
+        else
+            28
+    elif m == 4 or m == 6 or m == 9 or m == 11
+        30
+    elif m >= 1 and m <= 12
+        31
+    else
+        0
 
 // The ISO 8601 week-numbering year and week this date is in.
 //
@@ -365,7 +483,12 @@ pub fn days_in_month(y: Int, m: Int) -> Int
 //     println("${y}-W${w}")                       // 2026-W53
 // ```
 pub fn iso_week(d: CivilDate) -> (Int, Int)
-    todo("calendar-nv.iso_week")
+    // The week belongs to the year of its Thursday, so the Thursday is
+    // computed first and every other answer is read off it.
+    let ed = epoch_day(d)
+    let thursday = ed + 3 - weekday_index(ed)
+    let wy = date_from_epoch_day(thursday).year
+    (wy, (thursday - week1_monday(wy)) / 7 + 1)
 
 // The date at an ISO 8601 week-numbering year, week and weekday.
 //
@@ -382,7 +505,11 @@ pub fn iso_week(d: CivilDate) -> (Int, Int)
 //         Err(_) => println("no such week")
 // ```
 pub fn from_iso_week(year: Int, week: Int, w: Weekday) -> Result<CivilDate, CalError>
-    todo("calendar-nv.from_iso_week")
+    let start = week1_monday(year)
+    let weeks = (week1_monday(year + 1) - start) / 7
+    if week < 1 or week > weeks
+        return Err(WeekOutOfRange(year, week))
+    Ok(date_from_epoch_day(start + (week - 1) * 7 + weekday_number(w) - 1))
 
 // `-1`, `0` or `1` as `a` is before, the same as, or after `b`.
 //
@@ -398,7 +525,7 @@ pub fn from_iso_week(year: Int, week: Int, w: Weekday) -> Result<CivilDate, CalE
 //     println("${civil.compare_date(a, b)}")      // -1
 // ```
 pub fn compare_date(a: CivilDate, b: CivilDate) -> Int
-    todo("calendar-nv.compare_date")
+    compare_int(epoch_day(a), epoch_day(b))
 
 // `-1`, `0` or `1` as `a` is before, the same as, or after `b`.
 //
@@ -417,4 +544,61 @@ pub fn compare_date(a: CivilDate, b: CivilDate) -> Int
 //     println("${civil.compare_datetime(x, y)}")  // -1
 // ```
 pub fn compare_datetime(a: CivilDateTime, b: CivilDateTime) -> Int
-    todo("calendar-nv.compare_datetime")
+    let c = compare_date(a.date, b.date)
+    if c != 0
+        c
+    else
+        compare_int(nano_of_day(a.time), nano_of_day(b.time))
+
+// Division rounded toward negative infinity, for a positive divisor.
+//
+// `/` truncates toward zero (SPEC § 13.4), which is the wrong rounding
+// for a calendar: the day before the epoch has to be day -1 and not
+// day 0.  Every call site here divides by a positive constant.
+fn floor_div(a: Int, b: Int) -> Int
+    let q = a / b
+    if a < 0 and q * b != a
+        q - 1
+    else
+        q
+
+// How many days the year has: 365, or 366 when it is a leap year.
+fn days_in_year(y: Int) -> Int
+    if is_leap_year(y)
+        366
+    else
+        365
+
+// The day of the week as `0 ..= 6` with Monday 0, from an epoch day.
+//
+// Epoch day 0 is 1970-01-01, a Thursday, so the offset is 3.
+fn weekday_index(ed: Int) -> Int
+    let r = (ed + 3) % 7
+    if r < 0
+        r + 7
+    else
+        r
+
+// The epoch day of the Monday that opens ISO week 1 of `y`.
+//
+// ISO 8601 § 4.3.2.2 fixes week 1 as the week holding 4 January, so
+// the Monday of that week is the origin every week number counts from.
+fn week1_monday(y: Int) -> Int
+    let jan4 = epoch_day(CivilDate { year: y, month: 1, day: 4 })
+    jan4 - weekday_index(jan4)
+
+// `-1`, `0` or `1` as `a` is below, equal to, or above `b`.
+fn compare_int(a: Int, b: Int) -> Int
+    if a < b
+        -1
+    elif a > b
+        1
+    else
+        0
+
+// The nanosecond of the day a time of day names, `0 ..= 86_399_999_999_999`.
+//
+// One number, so comparing two times is comparing two integers rather
+// than four pairs of fields in the right order.
+pub fn nano_of_day(t: CivilTime) -> Int
+    ((t.hour * 60 + t.minute) * 60 + t.second) * 1000000000 + t.nano
