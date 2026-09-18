@@ -36,8 +36,12 @@ are green, and six more suites are added beside them.
   a `TimeDelta`, the counts each date operation refuses, every accepted
   and refused ISO 8601 string, every `strftime` directive in both
   directions, and what each of the ten refusals says and where it
-  points. Seventy tests over ten files, covering 751 of 751 measured
-  lines of `src/`.
+  points. Seventy tests over ten files.
+- `tests/coverage_union.sh` — one line-coverage number for `src/`.
+  `novo test --cov` measures one suite file at a time, so the script
+  unions the ten runs against a denominator measured from a package
+  whose only test touches nothing. It reports 751 of 751 lines, which
+  is 100%, with no line excused.
 
 ### Changed
 

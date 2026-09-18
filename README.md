@@ -288,9 +288,15 @@ novo test tests/strftime_vectors_tests.nv    #  7 tests: every directive, both w
 novo test tests/error_reporting_tests.nv     #  2 tests: what a refusal says and where
 ```
 
-Seventy tests over ten files. They cover 751 of 751 measured lines of
-`src/`, which is 100%, with no line excused. `novo test <file> --cov`
-prints the number for one file at a time.
+Seventy tests over ten files.
+
+```bash
+bash tests/coverage_union.sh         # 751 of 751 lines of src/ — 100.00%
+```
+
+`novo test <file> --cov` measures one file at a time, so that script
+unions the ten runs: a line is uncovered overall exactly when every
+suite reports it uncovered. No line is excused.
 
 ```bash
 bash tests/alloc_scan.sh             # the arithmetic path allocates nothing
