@@ -1,0 +1,342 @@
+// iso8601_vectors_tests.nv — the subset this package accepts, written
+// out one string at a time, and every refusal it makes.
+//
+// The accepted and refused lists at the top of `src/iso8601.nv` are
+// the specification; this file is that list as assertions, so a reader
+// deciding whether their input will be read can find the answer here
+// without running anything.
+//
+// The round trips are the load-bearing cases.  `parse(format(x)) == x`
+// is promised for every value the package can build, and the years
+// outside `0 ..= 9999` are where a formatter usually breaks it: a year
+// of five digits or a negative one is written with the digits it needs
+// and read back the same way.
+
+use std.test
+use civil
+use iso8601
+use span
+
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    civil.date(y, m, d)!
+
+fn clock(h: Int, mi: Int, s: Int, n: Int) -> CivilTime
+    civil.time_of(h, mi, s, n)!
+
+// The offset a parse stopped at, for a string that is expected to fail.
+fn refusal_offset(r: Result<CivilDate, CalError>) -> Int
+    match r
+        Ok(_)  => -2
+        Err(e) => calerror.offset_of(e)
+
+@test
+fn test_the_three_date_spellings_and_their_refusals() [io]
+    test.case("a negative year is written with the digits it needs")
+    match iso8601.parse_date("-0044-03-15")
+        Ok(d)  =>
+            test.assert(d.year == -44)
+            test.assert(d.month == 3)
+            test.assert(d.day == 15)
+        Err(_) => test.fail("-0044-03-15 is a date")
+
+    test.case("and a year of five digits")
+    match iso8601.parse_date("10000-01-01")
+        Ok(d)  => test.assert(d.year == 10000)
+        Err(_) => test.fail("10000-01-01 is a date")
+
+    test.case("a year of three digits is refused at the year")
+    test.assert(refusal_offset(iso8601.parse_date("202-03-15")) == 0)
+
+    test.case("a minus with no year behind it")
+    match iso8601.parse_date("-")
+        Err(Truncated(at)) => test.assert(at == 1)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("a minus sign is not a date")
+
+    test.case("a day the month does not reach")
+    match iso8601.parse_date("2026-04-31")
+        Err(DayOutOfRange(_, m, d)) =>
+            test.assert(m == 4)
+            test.assert(d == 31)
+        Err(_)                      => test.fail("wrong reason")
+        Ok(_)                       => test.fail("April has 30 days")
+
+    test.case("a day cut short, and a day that is not digits")
+    match iso8601.parse_date("2026-03-1")
+        Err(Truncated(at)) => test.assert(at == 9)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("one digit is not a day")
+    test.assert(refusal_offset(iso8601.parse_date("2026-03-1x")) == 8)
+
+    test.case("a month with no dash after it")
+    test.assert(refusal_offset(iso8601.parse_date("2026-0315")) == 5)
+
+    test.case("anything after a complete date is unread text")
+    match iso8601.parse_date("2026-03-15x")
+        Err(TrailingText(at)) => test.assert(at == 10)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a trailing x is not part of a date")
+
+    test.case("an ordinal day the year does not have")
+    match iso8601.parse_date("2026-366")
+        Err(OrdinalOutOfRange(_, o)) => test.assert(o == 366)
+        Err(_)                       => test.fail("wrong reason")
+        Ok(_)                        => test.fail("2026 has 365 days")
+
+@test
+fn test_the_week_date_spelling() [io]
+    test.case("every weekday of a week")
+    let expected = [9, 10, 11, 12, 13, 14, 15]
+    for n in 1..=7
+        match iso8601.parse_date("2026-W11-${n}")
+            Ok(d)  =>
+                test.assert(d.month == 3)
+                test.assert(d.day == expected[n - 1])
+            Err(_) => test.fail("2026-W11 is a week")
+
+    test.case("a week the year does not have")
+    match iso8601.parse_date("2025-W53-1")
+        Err(WeekOutOfRange(_, w)) => test.assert(w == 53)
+        Err(_)                    => test.fail("wrong reason")
+        Ok(_)                     => test.fail("2025 has 52 ISO weeks")
+
+    test.case("weekday 0 is not a weekday")
+    test.assert(refusal_offset(iso8601.parse_date("2026-W11-0")) == 9)
+
+    test.case("a week with no dash after it")
+    test.assert(refusal_offset(iso8601.parse_date("2026-W117")) == 8)
+
+@test
+fn test_the_time_spellings_and_their_refusals() [io]
+    test.case("no separator after the hour")
+    test.assert(refusal_offset_time(iso8601.parse_time("0930")) == 2)
+
+    test.case("an hour that is not an hour")
+    match iso8601.parse_time("25:00")
+        Err(TimeOutOfRange(h, _, _, _)) => test.assert(h == 25)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("there is no 25th hour")
+
+    test.case("a minute that is not a minute")
+    match iso8601.parse_time("09:60")
+        Err(TimeOutOfRange(_, m, _, _)) => test.assert(m == 60)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("there is no 60th minute")
+
+    test.case("a second past the leap second")
+    match iso8601.parse_time("09:30:61")
+        Err(TimeOutOfRange(_, _, s, _)) => test.assert(s == 61)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("there is no 61st second")
+
+    test.case("a leap second with no date to put it on")
+    match iso8601.parse_time("23:59:60")
+        Err(TimeOutOfRange(_, _, s, _)) => test.assert(s == 60)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("no CivilTime has a 60th second")
+
+    test.case("a decimal point with no digits after it")
+    match iso8601.parse_time("09:30:00.")
+        Err(Truncated(at)) => test.assert(at == 9)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("a fraction needs a digit")
+
+    test.case("every fraction width from one digit to nine")
+    match iso8601.parse_time("09:30:00.1")
+        Ok(t)  => test.assert(t.nano == 100000000)
+        Err(_) => test.fail("one digit is a fraction")
+    match iso8601.parse_time("09:30:00.123456")
+        Ok(t)  => test.assert(t.nano == 123456000)
+        Err(_) => test.fail("six digits are a fraction")
+    match iso8601.parse_time("09:30:00.123456789")
+        Ok(t)  => test.assert(t.nano == 123456789)
+        Err(_) => test.fail("nine digits are a fraction")
+
+    test.case("anything after a complete time is unread text")
+    match iso8601.parse_time("09:30x")
+        Err(TrailingText(at)) => test.assert(at == 5)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a trailing x is not part of a time")
+
+@test
+fn test_the_date_time_separator() [io]
+    test.case("a lower-case t is accepted")
+    match iso8601.parse_datetime("2026-03-15t09:30:00")
+        Ok(dt) => test.assert(dt.time.hour == 9)
+        Err(_) => test.fail("a lower-case t is an accepted separator")
+
+    test.case("anything else is not a separator")
+    match iso8601.parse_datetime("2026-03-15X09:30:00")
+        Err(BadFormat(at, _)) => test.assert(at == 10)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("X is not a separator")
+
+    test.case("a leap second on a date rolls into the next minute")
+    match iso8601.parse_datetime("2016-12-31T23:59:60")
+        Ok(dt) =>
+            test.assert(dt.date.year == 2017)
+            test.assert(dt.date.month == 1)
+            test.assert(dt.date.day == 1)
+            test.assert(dt.time.hour == 0)
+            test.assert(dt.time.minute == 0)
+            test.assert(dt.time.second == 0)
+        Err(_) => test.fail("RFC 3339 § 5.7 permits :60")
+
+@test
+fn test_the_rfc_3339_offset() [io]
+    test.case("a negative offset")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00-05:30")
+        Ok((_, off)) => test.assert(off == -330)
+        Err(_)       => test.fail("-05:30 is an offset")
+
+    test.case("an offset with no colon in it")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00+0200")
+        Err(BadFormat(at, _)) => test.assert(at == 22)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("RFC 3339 writes the colon")
+
+    test.case("an offset of more than a day")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00+25:00")
+        Err(BadFormat(at, _)) => test.assert(at == 20)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("there is no 25-hour offset")
+
+    test.case("text after a Z, and text after an offset")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00Zx")
+        Err(TrailingText(at)) => test.assert(at == 20)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a trailing x is not part of a timestamp")
+    match iso8601.parse_rfc3339("2026-03-15T09:30:00+02:00x")
+        Err(TrailingText(at)) => test.assert(at == 25)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a trailing x is not part of a timestamp")
+
+@test
+fn test_formatting_every_shape_of_year_and_fraction() [io]
+    test.case("the four zero-padded widths, and a negative year")
+    test.assert(iso8601.format_date(day(5, 1, 2)) == "0005-01-02")
+    test.assert(iso8601.format_date(day(50, 1, 2)) == "0050-01-02")
+    test.assert(iso8601.format_date(day(500, 1, 2)) == "0500-01-02")
+    test.assert(iso8601.format_date(day(5000, 1, 2)) == "5000-01-02")
+    test.assert(iso8601.format_date(day(-44, 3, 15)) == "-0044-03-15")
+    test.assert(iso8601.format_date(day(10000, 1, 1)) == "10000-01-01")
+
+    test.case("the fraction is printed in groups of three")
+    test.assert(iso8601.format_time(clock(9, 30, 0, 500000000)) == "09:30:00.500")
+    test.assert(iso8601.format_time(clock(9, 30, 0, 123456000)) == "09:30:00.123456")
+    test.assert(iso8601.format_time(clock(9, 30, 0, 1)) == "09:30:00.000000001")
+
+    test.case("the offset both ways")
+    let dt = civil.datetime(day(2026, 3, 15), clock(9, 30, 0, 0))
+    test.assert(iso8601.format_rfc3339(dt, -330) == "2026-03-15T09:30:00-05:30")
+    test.assert(iso8601.format_rfc3339(dt, 540) == "2026-03-15T09:30:00+09:00")
+
+    test.case("and every one of them reads back")
+    for n in 0..400
+        let d = civil.date_from_epoch_day(civil.epoch_day(day(-44, 1, 1)) + n)
+        match iso8601.parse_date(iso8601.format_date(d))
+            Ok(back) => test.assert(civil.compare_date(back, d) == 0)
+            Err(_)   => test.fail("this package cannot read its own output")
+
+@test
+fn test_duration_parsing_over_the_whole_grammar() [io]
+    test.case("weeks are seven days")
+    match iso8601.parse_duration("P2W")
+        Ok(x)  => test.assert(span.as_seconds(x) == 1209600)
+        Err(_) => test.fail("P2W is a duration")
+
+    test.case("a duration with no P")
+    match iso8601.parse_duration("1D")
+        Err(BadFormat(at, _)) => test.assert(at == 0)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a duration opens with P")
+
+    test.case("a P with nothing after it")
+    match iso8601.parse_duration("P")
+        Err(Truncated(at)) => test.assert(at == 1)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("a duration has at least one component")
+
+    test.case("a designator with no number")
+    match iso8601.parse_duration("PD")
+        Err(BadFormat(at, _)) => test.assert(at == 1)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a designator needs a number")
+
+    test.case("a number with no designator")
+    match iso8601.parse_duration("P1")
+        Err(Truncated(at)) => test.assert(at == 2)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("a number needs a designator")
+
+    test.case("a letter that is not a designator")
+    match iso8601.parse_duration("P1X")
+        Err(BadFormat(at, _)) => test.assert(at == 2)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("X is not a designator")
+    match iso8601.parse_duration("PT1X")
+        Err(BadFormat(at, _)) => test.assert(at == 3)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("X is not a designator")
+
+    test.case("two T's")
+    match iso8601.parse_duration("PT1HT2H")
+        Err(BadFormat(at, _)) => test.assert(at == 4)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a duration has one T")
+
+    test.case("a years designator is refused by name")
+    match iso8601.parse_duration("P1Y")
+        Err(BadFormat(at, _)) => test.assert(at == 2)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a year is not a length of time")
+
+    test.case("a fraction on anything but the seconds")
+    match iso8601.parse_duration("P1.5D")
+        Err(BadFormat(at, _)) => test.assert(at == 3)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("only the seconds take a fraction")
+
+    test.case("a fraction with no digits, and one with ten")
+    match iso8601.parse_duration("PT1.S")
+        Err(BadFormat(at, _)) => test.assert(at == 4)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a fraction needs a digit")
+    match iso8601.parse_duration("PT1.0123456789S")
+        Err(BadFormat(at, _)) => test.assert(at == 13)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("nine digits are the limit")
+
+@test
+fn test_duration_formatting_over_the_whole_grammar() [io]
+    test.case("a whole number of days has no time part")
+    test.assert(iso8601.format_duration(span.days(1)) == "P1D")
+    test.assert(iso8601.format_duration(span.days(400)) == "P400D")
+
+    test.case("days and a time part together")
+    match span.add(span.days(1), span.minutes(150))
+        Ok(d)  => test.assert(iso8601.format_duration(d) == "P1DT2H30M")
+        Err(_) => test.fail("a day and a half fits in an Int")
+
+    test.case("seconds, with and without a fraction")
+    test.assert(iso8601.format_duration(span.seconds(45)) == "PT45S")
+    test.assert(iso8601.format_duration(span.milliseconds(1500)) == "PT1.500S")
+    test.assert(iso8601.format_duration(span.nanoseconds(1)) == "PT0.000000001S")
+
+    test.case("a negative length carries the sign in front")
+    test.assert(iso8601.format_duration(span.minutes(-150)) == "-PT2H30M")
+    test.assert(iso8601.format_duration(span.milliseconds(-1500)) == "-PT1.500S")
+
+    test.case("and every one of them reads back")
+    let written = ["P1D", "P400D", "P1DT2H30M", "PT45S", "PT1.500S",
+                   "PT0.000000001S", "-PT2H30M", "-PT1.500S", "PT0S"]
+    for text in written
+        match iso8601.parse_duration(text)
+            Ok(d)  => test.assert(iso8601.format_duration(d) == text)
+            Err(_) => test.fail("this package cannot read its own output")
+
+// The offset a time parse stopped at, for a string expected to fail.
+fn refusal_offset_time(r: Result<CivilTime, CalError>) -> Int
+    match r
+        Ok(_)  => -2
+        Err(e) => calerror.offset_of(e)

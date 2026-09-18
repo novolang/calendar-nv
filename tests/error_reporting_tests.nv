@@ -1,0 +1,68 @@
+// error_reporting_tests.nv — what a refusal says, and where it points.
+//
+// A calendar library is read by somebody holding a file they did not
+// write, and the two questions they have are "what is wrong" and
+// "where".  So both halves of `CalError` are asserted here: the
+// sentence every variant produces, which is what a program prints when
+// it prints nothing else, and the offset, which is what lets it print
+// the input with a caret under the byte that stopped the parse.
+//
+// The rule the offsets follow: the five range variants are about
+// numbers a caller passed in and answer `-1`, and the four parse
+// variants answer a real index into the input.
+
+use std.test
+use std.str
+use calerror
+
+@test
+fn test_every_variant_says_what_it_carries() [io]
+    test.case("the range variants quote their numbers")
+    test.assert(str.contains(DayOutOfRange(2023, 2, 29).message(), "29"))
+    test.assert(str.contains(DayOutOfRange(2023, 2, 29).message(), "2023"))
+    test.assert(str.contains(MonthOutOfRange(13).message(), "13"))
+    test.assert(str.contains(TimeOutOfRange(24, 0, 0, 0).message(), "24"))
+    test.assert(str.contains(OrdinalOutOfRange(2026, 366).message(), "366"))
+    test.assert(str.contains(WeekOutOfRange(2025, 53).message(), "53"))
+
+    test.case("the parse variants quote their offset")
+    test.assert(str.contains(BadFormat(5, "a two-digit month").message(), "5"))
+    test.assert(str.contains(BadFormat(5, "a two-digit month").message(),
+                             "a two-digit month"))
+    test.assert(str.contains(Truncated(7).message(), "7"))
+    test.assert(str.contains(TrailingText(19).message(), "19"))
+    test.assert(str.contains(UnknownDirective(4, "%Z").message(), "%Z"))
+
+    test.case("and the overflow says which range it left")
+    test.assert(str.contains(Overflow("a year outside the range").message(),
+                             "a year outside the range"))
+
+    test.case("no message is empty")
+    test.assert(str.len(DayOutOfRange(2023, 2, 29).message()) > 0)
+    test.assert(str.len(MonthOutOfRange(13).message()) > 0)
+    test.assert(str.len(TimeOutOfRange(24, 0, 0, 0).message()) > 0)
+    test.assert(str.len(OrdinalOutOfRange(2026, 366).message()) > 0)
+    test.assert(str.len(WeekOutOfRange(2025, 53).message()) > 0)
+    test.assert(str.len(BadFormat(0, "a year").message()) > 0)
+    test.assert(str.len(Truncated(0).message()) > 0)
+    test.assert(str.len(TrailingText(0).message()) > 0)
+    test.assert(str.len(UnknownDirective(0, "%Z").message()) > 0)
+    test.assert(str.len(Overflow("a year").message()) > 0)
+
+@test
+fn test_the_offset_is_minus_one_when_there_is_no_text() [io]
+    test.case("the five range variants")
+    test.assert(calerror.offset_of(DayOutOfRange(2023, 2, 29)) == -1)
+    test.assert(calerror.offset_of(MonthOutOfRange(13)) == -1)
+    test.assert(calerror.offset_of(TimeOutOfRange(24, 0, 0, 0)) == -1)
+    test.assert(calerror.offset_of(OrdinalOutOfRange(2026, 366)) == -1)
+    test.assert(calerror.offset_of(WeekOutOfRange(2025, 53)) == -1)
+
+    test.case("and the overflow, which is also about numbers")
+    test.assert(calerror.offset_of(Overflow("a year")) == -1)
+
+    test.case("the four parse variants answer a real index")
+    test.assert(calerror.offset_of(BadFormat(5, "a two-digit month")) == 5)
+    test.assert(calerror.offset_of(Truncated(7)) == 7)
+    test.assert(calerror.offset_of(TrailingText(19)) == 19)
+    test.assert(calerror.offset_of(UnknownDirective(4, "%Z")) == 4)

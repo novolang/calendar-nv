@@ -1,0 +1,132 @@
+// span_edges_tests.nv — the ends of `TimeDelta`, where the answers
+// stop being obvious.
+//
+// Three things are checked here and nowhere else: the normalisation of
+// a negative sub-second value, which is the classic off-by-one in a
+// signed duration type; the four places the seconds field can leave
+// the range of an `Int`, each of which answers `Overflow` rather than
+// wrapping or trapping; and the borrow in `sub`, which is the same
+// arithmetic as the carry in `add` read the other way.
+
+use std.test
+use span
+
+// The largest and the most negative lengths this type can hold.  They
+// are written as a construction rather than as a literal because the
+// most negative one has no literal: its magnitude is one above the
+// largest `Int` and the minus in front of a number is a prefix
+// operator, not part of the number.
+fn longest() -> TimeDelta
+    span.seconds(9223372036854775807)
+
+fn most_negative() -> TimeDelta
+    span.seconds(-9223372036854775807 - 1)
+
+@test
+fn test_every_constructor_normalises_a_negative_value() [io]
+    test.case("nanoseconds")
+    test.assert(span.as_seconds(span.nanoseconds(-1)) == -1)
+    test.assert(span.subsec_nanos(span.nanoseconds(-1)) == 999999999)
+    test.assert(span.as_seconds(span.nanoseconds(-1000000000)) == -1)
+    test.assert(span.subsec_nanos(span.nanoseconds(-1000000000)) == 0)
+
+    test.case("milliseconds")
+    test.assert(span.as_seconds(span.milliseconds(-1)) == -1)
+    test.assert(span.subsec_nanos(span.milliseconds(-1)) == 999000000)
+    test.assert(span.as_seconds(span.milliseconds(-1000)) == -1)
+    test.assert(span.subsec_nanos(span.milliseconds(-1000)) == 0)
+
+    test.case("and a positive one keeps its whole part")
+    test.assert(span.as_seconds(span.nanoseconds(2500000000)) == 2)
+    test.assert(span.subsec_nanos(span.nanoseconds(2500000000)) == 500000000)
+    test.assert(span.as_seconds(span.milliseconds(2500)) == 2)
+    test.assert(span.subsec_nanos(span.milliseconds(2500)) == 500000000)
+
+@test
+fn test_subtraction_borrows_from_the_seconds() [io]
+    test.case("half a second off a whole one")
+    match span.sub(span.seconds(1), span.milliseconds(500))
+        Ok(d)  =>
+            test.assert(span.as_seconds(d) == 0)
+            test.assert(span.subsec_nanos(d) == 500000000)
+        Err(_) => test.fail("half a second fits in an Int")
+
+    test.case("and off nothing at all, which goes below zero")
+    match span.sub(span.seconds(0), span.milliseconds(500))
+        Ok(d)  =>
+            test.assert(span.as_seconds(d) == -1)
+            test.assert(span.subsec_nanos(d) == 500000000)
+            test.assert(span.is_negative(d))
+        Err(_) => test.fail("half a second fits in an Int")
+
+@test
+fn test_the_four_ways_the_seconds_leave_an_int() [io]
+    test.case("adding past the largest")
+    match span.add(longest(), span.seconds(1))
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("there is no second after the last one")
+
+    test.case("adding past the most negative")
+    match span.add(most_negative(), span.seconds(-1))
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("there is no second before the first one")
+
+    test.case("subtracting a negative past the largest")
+    match span.sub(longest(), span.seconds(-1))
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("there is no second after the last one")
+
+    test.case("subtracting a positive past the most negative")
+    match span.sub(most_negative(), span.seconds(1))
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("there is no second before the first one")
+
+    test.case("and the carry out of the nanoseconds counts too")
+    match span.add(longest(), span.milliseconds(1500))
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("a second and a half does not fit either")
+
+@test
+fn test_negating_the_most_negative_length_is_refused() [io]
+    test.case("negate")
+    match span.negate(most_negative())
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("its magnitude is one above the largest Int")
+
+    test.case("and so is its magnitude, for the same reason")
+    match span.magnitude(most_negative())
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("its magnitude is one above the largest Int")
+
+    test.case("the largest length negates without trouble")
+    match span.negate(longest())
+        Ok(d)  => test.assert(span.as_seconds(d) == -9223372036854775807)
+        Err(_) => test.fail("the largest length has an opposite")
+
+@test
+fn test_negation_carries_the_nanosecond_field_across_zero() [io]
+    test.case("a fraction changes the whole part when it flips")
+    match span.negate(span.milliseconds(1500))
+        Ok(d)  =>
+            test.assert(span.as_seconds(d) == -2)
+            test.assert(span.subsec_nanos(d) == 500000000)
+        Err(_) => test.fail("a second and a half has an opposite")
+
+    test.case("and back again")
+    match span.negate(span.negate(span.milliseconds(1500))!)
+        Ok(d)  =>
+            test.assert(span.as_seconds(d) == 1)
+            test.assert(span.subsec_nanos(d) == 500000000)
+        Err(_) => test.fail("a second and a half has an opposite")
+
+    test.case("magnitude of zero is zero")
+    match span.magnitude(span.seconds(0))
+        Ok(d)  => test.assert(span.as_seconds(d) == 0)
+        Err(_) => test.fail("zero has a magnitude")

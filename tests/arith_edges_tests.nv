@@ -1,0 +1,177 @@
+// arith_edges_tests.nv — where moving a date runs out of calendar, and
+// where the arithmetic goes backwards past zero.
+//
+// Two groups of cases.  The refusals: every operation here answers
+// `Overflow` rather than trapping when the count it is given cannot
+// land inside the years this package represents, and each of the four
+// has its own bound because a day, a month, a year and a length of
+// time are four different sizes.  And the negative side: a date before
+// the epoch divides the other way, and a difference read backwards is
+// the negation of the same difference read forwards.
+
+use std.test
+use arith
+use civil
+use span
+
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    civil.date(y, m, d)!
+
+fn at_noon(y: Int, m: Int, d: Int) -> CivilDateTime
+    civil.datetime(day(y, m, d), civil.time_of(12, 0, 0, 0)!)
+
+@test
+fn test_a_count_too_large_to_land_on_a_date_is_refused() [io]
+    let start = day(2026, 3, 15)
+
+    test.case("days")
+    match arith.add_days(start, 400000000001)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is past the last representable year")
+    match arith.add_days(start, -400000000001)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is before the first representable year")
+
+    test.case("months")
+    match arith.add_months(start, 160000000001)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is past the last representable year")
+    match arith.add_months(start, -160000000001)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is before the first representable year")
+
+    test.case("years")
+    match arith.add_years(start, 1333333334)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is past the last representable year")
+    match arith.add_years(start, -1333333334)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is before the first representable year")
+
+    test.case("a length of time")
+    match arith.add_delta(at_noon(2026, 3, 15), span.seconds(34560000000000001))
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is past the last representable year")
+    match arith.add_delta(at_noon(2026, 3, 15), span.seconds(-34560000000000001))
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("that is before the first representable year")
+
+@test
+fn test_a_count_that_fits_but_lands_outside_the_years() [io]
+    test.case("a billion years past 2026 is not a year this package has")
+    match arith.add_years(day(2026, 1, 1), 999999999)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("the last year is 999_999_999")
+
+    test.case("and a billion years before it is not either")
+    match arith.add_years(day(2026, 1, 1), -1000002026)
+        Err(Overflow(_)) => test.assert(true)
+        Err(_)           => test.fail("wrong reason")
+        Ok(_)            => test.fail("the first year is -999_999_999")
+
+    test.case("the years just inside the range are dates")
+    match arith.add_years(day(999999998, 6, 1), 1)
+        Ok(d)  => test.assert(d.year == 999999999)
+        Err(_) => test.fail("999_999_999 is a representable year")
+
+@test
+fn test_month_arithmetic_before_year_zero() [io]
+    test.case("a negative year divides toward the earlier month")
+    match arith.add_months(day(-5, 3, 1), 0)
+        Ok(d)  =>
+            test.assert(d.year == -5)
+            test.assert(d.month == 3)
+        Err(_) => test.fail("a date plus no months is that date")
+
+    test.case("and stepping back over January carries the year")
+    match arith.add_months(day(-5, 1, 31), -1)
+        Ok(d)  =>
+            test.assert(d.year == -6)
+            test.assert(d.month == 12)
+            test.assert(d.day == 31)
+        Err(_) => test.fail("the month before -0005-01 is -0006-12")
+
+    test.case("the clamp applies on the way back too")
+    match arith.add_months(day(2026, 3, 31), -1)
+        Ok(d)  =>
+            test.assert(d.month == 2)
+            test.assert(d.day == 28)
+        Err(_) => test.fail("2026-02-28 is a date")
+
+@test
+fn test_a_length_of_time_added_before_the_epoch() [io]
+    test.case("noon on the last day of 1969, back by a day and a half")
+    match arith.add_delta(at_noon(1969, 12, 31), span.negate(span.minutes(2160))!)
+        Ok(x)  =>
+            test.assert(x.date.year == 1969)
+            test.assert(x.date.month == 12)
+            test.assert(x.date.day == 30)
+            test.assert(x.time.hour == 0)
+        Err(_) => test.fail("a day and a half before noon is a date-time")
+
+    test.case("and back far enough to cross the epoch the other way")
+    match arith.add_delta(at_noon(1970, 1, 1), span.negate(span.hours(13))!)
+        Ok(x)  =>
+            test.assert(x.date.year == 1969)
+            test.assert(x.date.day == 31)
+            test.assert(x.time.hour == 23)
+        Err(_) => test.fail("thirteen hours before noon is a date-time")
+
+    test.case("the nanosecond field carries into a whole second")
+    let late = civil.datetime(day(1969, 12, 31), civil.time_of(23, 59, 59, 999999999)!)
+    match arith.add_delta(late, span.nanoseconds(1))
+        Ok(x)  =>
+            test.assert(x.date.year == 1970)
+            test.assert(x.time.hour == 0)
+            test.assert(x.time.nano == 0)
+        Err(_) => test.fail("one nanosecond into 1970 is a date-time")
+
+@test
+fn test_differences_read_backwards() [io]
+    test.case("months_between is zero within a month either way")
+    test.assert(arith.months_between(day(2026, 2, 14), day(2026, 1, 15)) == 0)
+    test.assert(arith.months_between(day(2026, 1, 15), day(2026, 2, 14)) == 0)
+
+    test.case("and counts whole months in both directions")
+    test.assert(arith.months_between(day(2026, 1, 15), day(2027, 1, 15)) == 12)
+    test.assert(arith.months_between(day(2027, 1, 15), day(2026, 1, 15)) == -12)
+    test.assert(arith.months_between(day(2026, 1, 20), day(2026, 3, 15)) == 1)
+
+    test.case("days_between spans a century")
+    test.assert(arith.days_between(day(1900, 1, 1), day(2000, 1, 1)) == 36524)
+
+    test.case("between is the negation of itself read the other way")
+    let a = civil.datetime(day(2026, 3, 15), civil.time_of(9, 0, 0, 500000000)!)
+    let b = civil.datetime(day(2026, 3, 16), civil.time_of(9, 0, 0, 0)!)
+    match arith.between(a, b)
+        Ok(x)  =>
+            test.assert(span.as_seconds(x) == 86399)
+            test.assert(span.subsec_nanos(x) == 500000000)
+        Err(_) => test.fail("a day fits in an Int")
+    match arith.between(b, a)
+        Ok(x)  =>
+            test.assert(span.as_seconds(x) == -86400)
+            test.assert(span.subsec_nanos(x) == 500000000)
+        Err(_) => test.fail("a day fits in an Int")
+
+@test
+fn test_the_month_boundaries_across_the_calendar() [io]
+    test.case("start_of_month keeps the year and the month")
+    let s = arith.start_of_month(day(-44, 3, 15))
+    test.assert(s.year == -44)
+    test.assert(s.month == 3)
+    test.assert(s.day == 1)
+
+    test.case("end_of_month over every month of a leap year")
+    let lengths = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    for m in 1..=12
+        test.assert(arith.end_of_month(day(2024, m, 1)).day == lengths[m - 1])

@@ -1,0 +1,232 @@
+// gregorian_vectors_tests.nv — the proleptic Gregorian calendar
+// checked against published values rather than against itself.
+//
+// The oracle is the rule, not this package: the day numbers are Howard
+// Hinnant's `days_from_civil` worked examples, the weekdays and ISO
+// week numbers are the ones Python's `datetime.date` answers for the
+// same dates, and the leap years are the century rule's own examples.
+// Every case here names the date in the text so a reader can check one
+// line against any other implementation.
+//
+// The four dates worth knowing: 1970-01-01 is day 0 and a Thursday,
+// 0001-01-01 is day -719162 and a Monday, 9999-12-31 is day 2932896
+// and a Friday, and 2000-02-29 is a date while 1900-02-29 and
+// 2100-02-29 are not.
+
+use std.test
+use civil
+
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    civil.date(y, m, d)!
+
+// The ISO number of the weekday a date falls on, which is the shortest
+// way to write a weekday assertion.
+fn weekday_number_of(y: Int, m: Int, d: Int) -> Int
+    civil.weekday_number(civil.weekday(day(y, m, d)))
+
+@test
+fn test_the_epoch_day_of_dates_with_published_numbers() [io]
+    test.case("the epoch, and the two ends of the four-digit years")
+    test.assert(civil.epoch_day(day(1970, 1, 1)) == 0)
+    test.assert(civil.epoch_day(day(1, 1, 1)) == -719162)
+    test.assert(civil.epoch_day(day(9999, 12, 31)) == 2932896)
+
+    test.case("the turn of the century, and its leap day")
+    test.assert(civil.epoch_day(day(2000, 1, 1)) == 10957)
+    test.assert(civil.epoch_day(day(2000, 2, 29)) == 11016)
+    test.assert(civil.epoch_day(day(1900, 1, 1)) == -25567)
+
+    test.case("and the conversion is its own inverse both ways")
+    for n in -720000..-719000
+        test.assert(civil.epoch_day(civil.date_from_epoch_day(n)) == n)
+    for n in 2932000..2933000
+        test.assert(civil.epoch_day(civil.date_from_epoch_day(n)) == n)
+
+@test
+fn test_every_day_of_a_leap_year_round_trips() [io]
+    test.case("2024 has 366 days and every one of them is a date")
+    var seen = 0
+    for n in 0..366
+        let d = civil.date_from_epoch_day(civil.epoch_day(day(2024, 1, 1)) + n)
+        test.assert(civil.day_of_year(d) == n + 1)
+        test.assert(civil.epoch_day(civil.date(d.year, d.month, d.day)!)
+                    == civil.epoch_day(d))
+        seen = seen + 1
+    test.assert(seen == 366)
+
+    test.case("the last of them is the 31st of December")
+    match civil.date_ordinal(2024, 366)
+        Ok(d)  =>
+            test.assert(d.month == 12)
+            test.assert(d.day == 31)
+        Err(_) => test.fail("2024 had a 366th day")
+
+@test
+fn test_the_century_rule_at_the_years_it_is_about() [io]
+    test.case("1600 and 2000 are leap years, 1700 1800 1900 2100 are not")
+    test.assert(civil.is_leap_year(1600))
+    test.assert(civil.is_leap_year(2000))
+    test.assert(civil.is_leap_year(1700) == false)
+    test.assert(civil.is_leap_year(1800) == false)
+    test.assert(civil.is_leap_year(1900) == false)
+    test.assert(civil.is_leap_year(2100) == false)
+
+    test.case("so February 29 exists in 1600 and 2000 and nowhere near 2100")
+    test.assert(civil.days_in_month(1600, 2) == 29)
+    test.assert(civil.days_in_month(2100, 2) == 28)
+    match civil.date(2100, 2, 29)
+        Err(DayOutOfRange(y, _, _)) => test.assert(y == 2100)
+        Err(_)                      => test.fail("wrong reason")
+        Ok(_)                       => test.fail("2100 is not a leap year")
+
+    test.case("negative years follow the same rule")
+    test.assert(civil.is_leap_year(-4))
+    test.assert(civil.is_leap_year(-1) == false)
+    test.assert(civil.epoch_day(day(-1, 12, 31)) < civil.epoch_day(day(0, 1, 1)))
+
+@test
+fn test_the_twelve_month_lengths() [io]
+    test.case("a common year")
+    let common = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    for m in 1..=12
+        test.assert(civil.days_in_month(2026, m) == common[m - 1])
+
+    test.case("a leap year differs in February and nowhere else")
+    for m in 1..=12
+        let expected = if m == 2
+            29
+        else
+            common[m - 1]
+        test.assert(civil.days_in_month(2024, m) == expected)
+
+@test
+fn test_the_weekday_of_dates_with_published_answers() [io]
+    test.case("seven consecutive days name the seven weekdays in order")
+    match civil.weekday(day(2026, 3, 9))
+        Mon => test.assert(true)
+        _   => test.fail("2026-03-09 is a Monday")
+    match civil.weekday(day(2026, 3, 10))
+        Tue => test.assert(true)
+        _   => test.fail("2026-03-10 is a Tuesday")
+    match civil.weekday(day(2026, 3, 11))
+        Wed => test.assert(true)
+        _   => test.fail("2026-03-11 is a Wednesday")
+    match civil.weekday(day(2026, 3, 12))
+        Thu => test.assert(true)
+        _   => test.fail("2026-03-12 is a Thursday")
+    match civil.weekday(day(2026, 3, 13))
+        Fri => test.assert(true)
+        _   => test.fail("2026-03-13 is a Friday")
+    match civil.weekday(day(2026, 3, 14))
+        Sat => test.assert(true)
+        _   => test.fail("2026-03-14 is a Saturday")
+    match civil.weekday(day(2026, 3, 15))
+        Sun => test.assert(true)
+        _   => test.fail("2026-03-15 is a Sunday")
+
+    test.case("dates whose weekday is a published fact")
+    test.assert(weekday_number_of(1970, 1, 1) == 4)
+    test.assert(weekday_number_of(1, 1, 1) == 1)
+    test.assert(weekday_number_of(9999, 12, 31) == 5)
+    test.assert(weekday_number_of(2000, 1, 1) == 6)
+    test.assert(weekday_number_of(1900, 1, 1) == 1)
+    test.assert(weekday_number_of(2024, 2, 29) == 4)
+
+    test.case("and before the epoch, where the remainder goes negative")
+    test.assert(weekday_number_of(1969, 12, 28) == 7)
+    test.assert(weekday_number_of(1969, 12, 29) == 1)
+    test.assert(weekday_number_of(1969, 7, 20) == 7)
+    test.assert(weekday_number_of(1968, 3, 1) == 5)
+
+@test
+fn test_the_two_weekday_numberings_are_inverse() [io]
+    test.case("weekday_number and weekday_of")
+    for n in 1..=7
+        test.assert(civil.weekday_number(civil.weekday_of(n)) == n)
+
+    test.case("the named constants agree with the numbers")
+    test.assert(civil.weekday_number(Mon) == 1)
+    test.assert(civil.weekday_number(Tue) == 2)
+    test.assert(civil.weekday_number(Wed) == 3)
+    test.assert(civil.weekday_number(Thu) == 4)
+    test.assert(civil.weekday_number(Fri) == 5)
+    test.assert(civil.weekday_number(Sat) == 6)
+    test.assert(civil.weekday_number(Sun) == 7)
+
+@test
+fn test_the_month_names_and_the_month_numbers() [io]
+    test.case("month_of answers the name of every month")
+    test.assert(civil.month_number(civil.month_of(day(2026, 1, 1))) == 1)
+    for m in 1..=12
+        test.assert(civil.month_number(civil.month_of(day(2026, m, 1))) == m)
+
+    test.case("the named constants")
+    test.assert(civil.month_number(Jan) == 1)
+    test.assert(civil.month_number(Feb) == 2)
+    test.assert(civil.month_number(Mar) == 3)
+    test.assert(civil.month_number(Apr) == 4)
+    test.assert(civil.month_number(May) == 5)
+    test.assert(civil.month_number(Jun) == 6)
+    test.assert(civil.month_number(Jul) == 7)
+    test.assert(civil.month_number(Aug) == 8)
+    test.assert(civil.month_number(Sep) == 9)
+    test.assert(civil.month_number(Oct) == 10)
+    test.assert(civil.month_number(Nov) == 11)
+    test.assert(civil.month_number(Dec) == 12)
+
+@test
+fn test_iso_weeks_against_published_calendars() [io]
+    test.case("the years with 53 weeks, and the years without")
+    let (y1, w1) = civil.iso_week(day(2020, 12, 31))
+    test.assert(y1 == 2020)
+    test.assert(w1 == 53)
+    let (y2, w2) = civil.iso_week(day(2021, 1, 1))
+    test.assert(y2 == 2020)
+    test.assert(w2 == 53)
+    let (y3, w3) = civil.iso_week(day(2020, 1, 1))
+    test.assert(y3 == 2020)
+    test.assert(w3 == 1)
+
+    test.case("a date in the last week of the year before it")
+    let (y4, w4) = civil.iso_week(day(2000, 1, 1))
+    test.assert(y4 == 1999)
+    test.assert(w4 == 52)
+
+    test.case("every day of 2026 is in a week its own Thursday belongs to")
+    for n in 0..365
+        let d = civil.date_from_epoch_day(civil.epoch_day(day(2026, 1, 1)) + n)
+        let (wy, wk) = civil.iso_week(d)
+        match civil.from_iso_week(wy, wk, civil.weekday(d))
+            Ok(back) => test.assert(civil.compare_date(back, d) == 0)
+            Err(_)   => test.fail("a date's own week is a week")
+
+    test.case("week 53 exists in 2020 and 2026 and not in 2021")
+    match civil.from_iso_week(2020, 53, Mon)
+        Ok(_)  => test.assert(true)
+        Err(_) => test.fail("2020 has 53 ISO weeks")
+    match civil.from_iso_week(2021, 53, Mon)
+        Err(WeekOutOfRange(y, w)) =>
+            test.assert(y == 2021)
+            test.assert(w == 53)
+        Err(_)                    => test.fail("wrong reason")
+        Ok(_)                     => test.fail("2021 has 52 ISO weeks")
+
+    test.case("week 0 is refused as loudly as week 54")
+    match civil.from_iso_week(2026, 0, Mon)
+        Err(WeekOutOfRange(_, w)) => test.assert(w == 0)
+        Err(_)                    => test.fail("wrong reason")
+        Ok(_)                     => test.fail("there is no week 0")
+
+@test
+fn test_comparison_orders_dates_before_times() [io]
+    test.case("a later date wins whatever the clock says")
+    let early = civil.datetime(day(2026, 3, 15), civil.time_of(23, 59, 59, 999999999)!)
+    let late = civil.datetime(day(2026, 3, 16), civil.midnight())
+    test.assert(civil.compare_datetime(early, late) == -1)
+    test.assert(civil.compare_datetime(late, early) == 1)
+
+    test.case("nano_of_day is the number a time is compared by")
+    test.assert(civil.nano_of_day(civil.midnight()) == 0)
+    test.assert(civil.nano_of_day(civil.time_of(0, 0, 1, 0)!) == 1000000000)
+    test.assert(civil.nano_of_day(civil.time_of(23, 59, 59, 999999999)!)
+                == 86399999999999)

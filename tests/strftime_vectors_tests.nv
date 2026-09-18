@@ -1,0 +1,345 @@
+// strftime_vectors_tests.nv — every directive in the table, written
+// and read back.
+//
+// The table at the top of `src/strfmt.nv` is the whole of what this
+// module implements, in one locale.  Each directive gets a case here
+// with the text it produces for a date whose every field is known —
+// Sunday the 15th of March 2026, at 09:30:00.123456789 — so the
+// expected strings can be checked by eye against any C library.
+//
+// `directives()` is asserted against `format` rather than against a
+// list written twice: every entry of the list formats, and nothing
+// outside the list does.
+
+use std.test
+use std.list
+use std.str
+use civil
+use strfmt
+
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    civil.date(y, m, d)!
+
+// The reference value: every field distinct, so a directive that read
+// the wrong one shows it.
+fn subject() -> CivilDateTime
+    civil.datetime(day(2026, 3, 15), civil.time_of(9, 30, 0, 123456789)!)
+
+// The text a format produces, or the empty string when it refuses.
+fn rendered(dt: CivilDateTime, fmt: Str) -> Str
+    match strfmt.format(dt, fmt)
+        Ok(s)  => s
+        Err(_) => ""
+
+@test
+fn test_every_directive_in_the_table_renders() [io]
+    let dt = subject()
+
+    test.case("the year, the month and the day")
+    test.assert(rendered(dt, "%Y") == "2026")
+    test.assert(rendered(dt, "%y") == "26")
+    test.assert(rendered(dt, "%m") == "03")
+    test.assert(rendered(dt, "%d") == "15")
+    test.assert(rendered(dt, "%e") == "15")
+    test.assert(rendered(dt, "%j") == "074")
+
+    test.case("the clock")
+    test.assert(rendered(dt, "%H") == "09")
+    test.assert(rendered(dt, "%I") == "09")
+    test.assert(rendered(dt, "%M") == "30")
+    test.assert(rendered(dt, "%S") == "00")
+    test.assert(rendered(dt, "%f") == "123456789")
+    test.assert(rendered(dt, "%p") == "AM")
+    test.assert(rendered(dt, "%P") == "am")
+
+    test.case("the names")
+    test.assert(rendered(dt, "%A") == "Sunday")
+    test.assert(rendered(dt, "%a") == "Sun")
+    test.assert(rendered(dt, "%B") == "March")
+    test.assert(rendered(dt, "%b") == "Mar")
+
+    test.case("the ISO week fields")
+    test.assert(rendered(dt, "%u") == "7")
+    test.assert(rendered(dt, "%G") == "2026")
+    test.assert(rendered(dt, "%V") == "11")
+
+    test.case("the compounds and the literal")
+    test.assert(rendered(dt, "%F") == "2026-03-15")
+    test.assert(rendered(dt, "%T") == "09:30:00")
+    test.assert(rendered(dt, "%%") == "%")
+
+    test.case("and literal bytes are copied through")
+    test.assert(rendered(dt, "on %A the %e of %B") == "on Sunday the 15 of March")
+
+@test
+fn test_the_directives_list_and_the_formatter_agree() [io]
+    test.case("every entry of the list formats")
+    let ds = strfmt.directives()
+    test.assert(list.len(ds) == 23)
+    for d in ds
+        match strfmt.format(subject(), d)
+            Ok(s)  => test.assert(str.len(s) > 0)
+            Err(_) => test.fail("a directive in the list did not format")
+
+    test.case("and a letter outside the list is refused, with the two characters")
+    match strfmt.format(subject(), "%Q")
+        Err(UnknownDirective(at, d)) =>
+            test.assert(at == 0)
+            test.assert(d == "%Q")
+        Err(_)                       => test.fail("wrong reason")
+        Ok(_)                        => test.fail("%Q is not in the table")
+
+    test.case("a percent at the end of the format")
+    match strfmt.format(subject(), "the %")
+        Err(BadFormat(at, _)) => test.assert(at == 4)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a % needs a directive after it")
+
+@test
+fn test_the_padded_and_signed_shapes() [io]
+    test.case("a day below ten is space-padded by %e and zero-padded by %d")
+    let early = civil.datetime(day(2026, 3, 5), civil.midnight())
+    test.assert(rendered(early, "%d") == "05")
+    test.assert(rendered(early, "%e") == " 5")
+
+    test.case("a year below a thousand keeps four digits, a negative one gains a sign")
+    let old = civil.datetime(day(44, 3, 15), civil.midnight())
+    test.assert(rendered(old, "%Y") == "0044")
+    test.assert(rendered(old, "%y") == "44")
+    let ancient = civil.datetime(day(-44, 3, 15), civil.midnight())
+    test.assert(rendered(ancient, "%Y") == "-0044")
+    test.assert(rendered(ancient, "%y") == "56")
+
+    test.case("the twelve-hour clock at its three interesting hours")
+    test.assert(rendered(at_hour(0), "%I %p") == "12 AM")
+    test.assert(rendered(at_hour(11), "%I %p") == "11 AM")
+    test.assert(rendered(at_hour(12), "%I %p") == "12 PM")
+    test.assert(rendered(at_hour(13), "%I %p") == "01 PM")
+    test.assert(rendered(at_hour(23), "%I %P") == "11 pm")
+    test.assert(rendered(at_hour(0), "%I %P") == "12 am")
+
+@test
+fn test_every_weekday_and_month_name() [io]
+    test.case("the seven weekday names, long and short")
+    let names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                 "Saturday", "Sunday"]
+    for n in 1..=7
+        let dt = civil.datetime(day(2026, 3, 8 + n), civil.midnight())
+        test.assert(rendered(dt, "%A") == names[n - 1])
+        test.assert(rendered(dt, "%a") == str.slice(names[n - 1], 0, 3))
+
+    test.case("the twelve month names, long and short")
+    let months = ["January", "February", "March", "April", "May", "June",
+                  "July", "August", "September", "October", "November",
+                  "December"]
+    for m in 1..=12
+        let dt = civil.datetime(day(2026, m, 1), civil.midnight())
+        test.assert(rendered(dt, "%B") == months[m - 1])
+        test.assert(rendered(dt, "%b") == str.slice(months[m - 1], 0, 3))
+
+@test
+fn test_a_format_that_cannot_name_a_day_is_refused_first() [io]
+    test.case("no year")
+    match strfmt.parse("09:30", "%H:%M")
+        Err(BadFormat(_, _)) => test.assert(true)
+        Err(_)               => test.fail("wrong reason")
+        Ok(_)                => test.fail("a parser must not invent a date")
+
+    test.case("a year and no day")
+    match strfmt.parse("2026", "%Y")
+        Err(BadFormat(_, _)) => test.assert(true)
+        Err(_)               => test.fail("wrong reason")
+        Ok(_)                => test.fail("a year alone is not a date")
+
+    test.case("a year and a day but no month")
+    match strfmt.parse("2026 15", "%Y %d")
+        Err(BadFormat(_, _)) => test.assert(true)
+        Err(_)               => test.fail("wrong reason")
+        Ok(_)                => test.fail("a day of which month")
+
+    test.case("an unknown directive is caught before the input is read")
+    match strfmt.parse("", "%Q")
+        Err(UnknownDirective(at, d)) =>
+            test.assert(at == 0)
+            test.assert(d == "%Q")
+        Err(_)                       => test.fail("wrong reason")
+        Ok(_)                        => test.fail("%Q is not in the table")
+
+    test.case("and so is a percent at the end")
+    match strfmt.parse("", "%Y-%m-%d%")
+        Err(BadFormat(at, _)) => test.assert(at == 8)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("a % needs a directive after it")
+
+@test
+fn test_parsing_reads_the_same_table() [io]
+    test.case("the month as a name, long and short")
+    match strfmt.parse("15 March 2026", "%d %B %Y")
+        Ok(dt) =>
+            test.assert(dt.date.month == 3)
+            test.assert(dt.date.day == 15)
+        Err(_) => test.fail("that input matches that format")
+    match strfmt.parse("15 Mar 2026", "%d %b %Y")
+        Ok(dt) => test.assert(dt.date.month == 3)
+        Err(_) => test.fail("that input matches that format")
+
+    test.case("a weekday name is checked against the date it sits beside")
+    match strfmt.parse("Sunday 2026-03-15", "%A %F")
+        Ok(dt) => test.assert(dt.date.day == 15)
+        Err(_) => test.fail("2026-03-15 was a Sunday")
+    match strfmt.parse("Monday 2026-03-15", "%A %F")
+        Err(BadFormat(_, _)) => test.assert(true)
+        Err(_)               => test.fail("wrong reason")
+        Ok(_)                => test.fail("2026-03-15 was not a Monday")
+    match strfmt.parse("Sun 2026-03-15", "%a %F")
+        Ok(dt) => test.assert(dt.date.day == 15)
+        Err(_) => test.fail("2026-03-15 was a Sunday")
+
+    test.case("the day of the year, with no month in the format")
+    match strfmt.parse("2026-074", "%Y-%j")
+        Ok(dt) =>
+            test.assert(dt.date.month == 3)
+            test.assert(dt.date.day == 15)
+        Err(_) => test.fail("074 is a day of 2026")
+
+    test.case("the ISO week fields build a date of their own")
+    match strfmt.parse("2026-W11-7", "%G-W%V-%u")
+        Ok(dt) =>
+            test.assert(dt.date.month == 3)
+            test.assert(dt.date.day == 15)
+        Err(_) => test.fail("2026-W11-7 is a date")
+    match strfmt.parse("2026-W11", "%G-W%V")
+        Ok(dt) => test.assert(dt.date.day == 9)
+        Err(_) => test.fail("a week with no weekday opens on its Monday")
+
+    test.case("a two-digit year follows the POSIX rule")
+    match strfmt.parse("99-01-02", "%y-%m-%d")
+        Ok(dt) => test.assert(dt.date.year == 1999)
+        Err(_) => test.fail("99 is 1999")
+    match strfmt.parse("68-01-02", "%y-%m-%d")
+        Ok(dt) => test.assert(dt.date.year == 2068)
+        Err(_) => test.fail("68 is 2068")
+
+    test.case("a negative year")
+    match strfmt.parse("-0044-03-15", "%Y-%m-%d")
+        Ok(dt) => test.assert(dt.date.year == -44)
+        Err(_) => test.fail("-0044 is a year")
+
+    test.case("the space-padded day, and the compounds")
+    match strfmt.parse(" 5/03/2026", "%e/%m/%Y")
+        Ok(dt) => test.assert(dt.date.day == 5)
+        Err(_) => test.fail("a space-padded day is a day")
+    match strfmt.parse("2026-03-15 09:30:00", "%F %T")
+        Ok(dt) =>
+            test.assert(dt.date.day == 15)
+            test.assert(dt.time.hour == 9)
+            test.assert(dt.time.minute == 30)
+        Err(_) => test.fail("that input matches that format")
+
+    test.case("the clock, the fraction and the half of the day")
+    match strfmt.parse("2026-03-15 09:30:00.123456789", "%F %H:%M:%S.%f")
+        Ok(dt) => test.assert(dt.time.nano == 123456789)
+        Err(_) => test.fail("nine digits are a fraction")
+    match strfmt.parse("2026-03-15 01 PM", "%F %I %p")
+        Ok(dt) => test.assert(dt.time.hour == 13)
+        Err(_) => test.fail("one in the afternoon is hour 13")
+    match strfmt.parse("2026-03-15 12 am", "%F %I %P")
+        Ok(dt) => test.assert(dt.time.hour == 0)
+        Err(_) => test.fail("twelve in the morning is hour 0")
+    match strfmt.parse("2026-03-15 12 PM", "%F %I %p")
+        Ok(dt) => test.assert(dt.time.hour == 12)
+        Err(_) => test.fail("noon is hour 12")
+
+    test.case("a literal percent in the input")
+    match strfmt.parse("2026-03-15%", "%F%%")
+        Ok(dt) => test.assert(dt.date.day == 15)
+        Err(_) => test.fail("a literal percent matches a literal percent")
+
+    test.case("a day with no space in front of it still matches %e")
+    match strfmt.parse("15/03/2026", "%e/%m/%Y")
+        Ok(dt) => test.assert(dt.date.day == 15)
+        Err(_) => test.fail("%e accepts a two-digit day with no padding")
+
+@test
+fn test_what_a_parse_refuses_and_where() [io]
+    test.case("a literal the input does not have")
+    match strfmt.parse("15-03-2026", "%d/%m/%Y")
+        Err(BadFormat(at, _)) => test.assert(at == 2)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("the separators differ")
+
+    test.case("a name the input does not have")
+    match strfmt.parse("Blursday 2026-03-15", "%A %F")
+        Err(BadFormat(at, _)) => test.assert(at == 0)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("Blursday is not a weekday")
+    match strfmt.parse("15 Smarch 2026", "%d %B %Y")
+        Err(BadFormat(at, _)) => test.assert(at == 3)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("Smarch is not a month")
+    match strfmt.parse("2026-03-15 09 XM", "%F %I %p")
+        Err(BadFormat(at, _)) => test.assert(at == 14)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("XM is neither half of the day")
+
+    test.case("a name that runs off the end of the input")
+    match strfmt.parse("Sun", "%A %F")
+        Err(BadFormat(at, _)) => test.assert(at == 0)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("Sun is not Sunday")
+
+    test.case("and an input that has ended already")
+    match strfmt.parse("", "%A %F")
+        Err(Truncated(at)) => test.assert(at == 0)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("nothing is not a weekday name")
+
+    test.case("a compound the input breaks in the middle of")
+    match strfmt.parse("2026/03/15", "%F")
+        Err(BadFormat(at, _)) => test.assert(at == 4)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("%F writes dashes")
+    match strfmt.parse("2026-03-15 09-30-00", "%F %T")
+        Err(BadFormat(at, _)) => test.assert(at == 13)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("%T writes colons")
+
+    test.case("digits the input does not have")
+    match strfmt.parse("2026-03-", "%F")
+        Err(Truncated(at)) => test.assert(at == 8)
+        Err(_)             => test.fail("wrong reason")
+        Ok(_)              => test.fail("a day needs two digits")
+
+    test.case("a date the calendar does not have")
+    match strfmt.parse("2023-02-29", "%F")
+        Err(DayOutOfRange(_, _, d)) => test.assert(d == 29)
+        Err(_)                      => test.fail("wrong reason")
+        Ok(_)                       => test.fail("2023 was not a leap year")
+
+    test.case("input left over after the format runs out")
+    match strfmt.parse("2026-03-15 and more", "%F")
+        Err(TrailingText(at)) => test.assert(at == 10)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("the rest of the input is unread")
+
+    test.case("a two-digit field stops at two digits, whatever follows")
+    match strfmt.parse("2026-03-151", "%Y-%m-%d")
+        Err(TrailingText(at)) => test.assert(at == 10)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("%d reads two digits and stops")
+
+    test.case("a literal percent the input does not have")
+    match strfmt.parse("2026-03-15x", "%F%%")
+        Err(BadFormat(at, _)) => test.assert(at == 10)
+        Err(_)                => test.fail("wrong reason")
+        Ok(_)                 => test.fail("x is not a percent sign")
+
+    test.case("and a time the clock does not have")
+    match strfmt.parse("2026-03-15 25:00:00", "%F %T")
+        Err(TimeOutOfRange(h, _, _, _)) => test.assert(h == 25)
+        Err(_)                          => test.fail("wrong reason")
+        Ok(_)                           => test.fail("there is no 25th hour")
+
+// The subject at a given hour, for the twelve-hour clock cases.
+fn at_hour(h: Int) -> CivilDateTime
+    civil.datetime(day(2026, 3, 15), civil.time_of(h, 0, 0, 0)!)
