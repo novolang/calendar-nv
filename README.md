@@ -14,11 +14,14 @@ the registry are built on it:
 [humantime-nv](https://novo-lang.org/packages/humantime-nv) and
 [ntp-nv](https://novo-lang.org/packages/ntp-nv).
 
-**Status: NOT IMPLEMENTED — interface only.** Every function is declared
-with its full signature, but every body is a `todo()` that panics when
-called. The package is published so its design can be reviewed and
-depended on before it is implemented. Version 0.1.0 will be the first
-working release.
+## Status
+
+Every function in this package has a body, and the test suites pass.
+This is version 0.1.0, the first working release, and its stability is
+`experimental`: the signatures are the ones published as an interface
+at 0.0.1 and may still change while the packages built on this one are
+written. What the package does not do is listed under
+[What is not included](#what-is-not-included).
 
 ## What it is
 
@@ -107,10 +110,7 @@ fn main() [io]
         Err(e) => println(e.message())
 ```
 
-Build and test with `novo pkg build` and `novo test`. Today `novo test`
-fails on purpose: every test reaches a
-`not implemented: calendar-nv.<fn>` panic. The tests are the
-specification the implementation will have to satisfy.
+Build with `novo pkg build` and run the suites with `novo test`.
 
 ## What the package contains
 
@@ -207,6 +207,14 @@ and clamp the day.
     numbers the caller passed in, and there is no string to point at.
     The `Error` trait that `Result<T, CalError>` requires is SPEC
     section 3.4.
+16. **A function that answers a `Result` allocates one heap cell for
+    the answer.** That holds on the `Ok` path as well as the `Err`
+    one, because a `Result` is an enum and an enum is a heap cell. A
+    caller moving a date inside a loop can avoid it: `civil.epoch_day`,
+    `civil.date_from_epoch_day`, `arith.days_between`,
+    `civil.compare_date` and every constructor in `span` answer a plain
+    value and touch no heap. `tests/alloc_scan.sh` measures that claim
+    over 41 functions.
 
 ## What is not included
 
@@ -233,6 +241,9 @@ and clamp the day.
 - **Fractional seconds past the ninth digit.** They are refused rather
   than dropped, because silent truncation is how a round trip stops
   being one.
+- **A build for a microcontroller.** Both formatters build strings, and
+  a string needs a heap allocator. The arithmetic half touches no heap,
+  but the package makes no claim to compile for a target without one.
 
 ## Related packages
 
@@ -263,11 +274,30 @@ and clamp the day.
 ## Tests
 
 ```bash
-novo test tests/civil_tests.nv       # 11 tests: the types and the questions
-novo test tests/span_tests.nv        #  6 tests: the signed length of time
-novo test tests/arith_tests.nv       #  9 tests: moving a date, and the clamp
-novo test tests/format_tests.nv      # 11 tests: both formatters, both ways
+novo test tests/civil_tests.nv               # 10 tests: the types and the questions
+novo test tests/span_tests.nv                #  5 tests: the signed length of time
+novo test tests/arith_tests.nv               #  8 tests: moving a date, and the clamp
+novo test tests/format_tests.nv              # 10 tests: both formatters, both ways
+novo test tests/gregorian_vectors_tests.nv   #  9 tests: the calendar against published values
+novo test tests/span_edges_tests.nv          #  5 tests: the ends of a TimeDelta
+novo test tests/arith_edges_tests.nv         #  6 tests: the counts that are refused
+novo test tests/iso8601_vectors_tests.nv     #  8 tests: every accepted and refused string
+novo test tests/strftime_vectors_tests.nv    #  7 tests: every directive, both ways
+novo test tests/error_reporting_tests.nv     #  2 tests: what a refusal says and where
 ```
+
+Seventy tests over ten files. They cover 751 of 751 measured lines of
+`src/`, which is 100%, with no line excused. `novo test <file> --cov`
+prints the number for one file at a time.
+
+```bash
+bash tests/alloc_scan.sh             # the arithmetic path allocates nothing
+```
+
+That script compiles `tests/alloc_probe.nv` with optimisation off,
+reads the emitted LLVM, and fails if any of the 41 functions named in
+it contains a call to `novo_alloc`. Rule 16 above says which functions
+are not on that list and why.
 
 The reference implementation is Rust's `chrono`, minus everything that
 touches a machine: `NaiveDate`, `NaiveTime`, `NaiveDateTime`,
@@ -286,35 +316,37 @@ the sign of a `TimeDelta` lives in the seconds field, that
 from the calendar year at the turn of 2027, and that `%Y` and the rest
 of the directive table agree with `directives()`.
 
-The tests compile today and fail at run, each on the
-`not implemented: calendar-nv.<fn>` panic that is its body. That is the
-expected state of an interface release. Run `novo test --isolate` for
-one verdict per test, naming the function it stopped at. They turn
-green one at a time as bodies land.
-
 ## Implementation status
+
+Everything the package declares is implemented. `novo doc` renders the
+signature and the example of each of them.
 
 | Item | Implemented |
 | --- | --- |
-| `civil.CivilDate`, `.CivilTime`, `.CivilDateTime`, `.Weekday`, `.Month` | declared |
-| `span.TimeDelta`, `calerror.CalError` | declared |
-| `civil.date`, `.date_ordinal`, `.date_from_epoch_day`, `.epoch_day` | no |
-| `civil.time_of`, `.midnight`, `.datetime` | no |
-| `civil.weekday`, `.weekday_number`, `.month_of`, `.month_number`, `.day_of_year` | no |
-| `civil.is_leap_year`, `.days_in_month` | no |
-| `civil.iso_week`, `.from_iso_week` | no |
-| `civil.compare_date`, `.compare_datetime` | no |
-| `span.nanoseconds`, `.milliseconds`, `.seconds`, `.minutes`, `.hours`, `.days` | no |
-| `span.as_seconds`, `.subsec_nanos` | no |
-| `span.add`, `.sub`, `.negate`, `.magnitude`, `.is_negative`, `.compare` | no |
-| `arith.add_days`, `.add_months`, `.add_years`, `.add_delta` | no |
-| `arith.days_between`, `.months_between`, `.between` | no |
-| `arith.start_of_month`, `.end_of_month` | no |
-| `iso8601.parse_date`, `.parse_time`, `.parse_datetime`, `.parse_rfc3339` | no |
-| `iso8601.format_date`, `.format_time`, `.format_datetime`, `.format_rfc3339` | no |
-| `iso8601.parse_duration`, `.format_duration` | no |
-| `strfmt.format`, `.parse`, `.directives` | no |
-| `calerror.offset_of`, `CalError.message` | no |
+| `civil.CivilDate`, `.CivilTime`, `.CivilDateTime`, `.Weekday`, `.Month` | yes |
+| `span.TimeDelta`, `calerror.CalError` | yes |
+| `civil.date`, `.date_ordinal`, `.date_from_epoch_day`, `.epoch_day` | yes |
+| `civil.time_of`, `.midnight`, `.datetime`, `.nano_of_day` | yes |
+| `civil.weekday`, `.weekday_number`, `.weekday_of`, `.month_of`, `.month_number`, `.day_of_year` | yes |
+| `civil.is_leap_year`, `.days_in_month` | yes |
+| `civil.iso_week`, `.from_iso_week` | yes |
+| `civil.compare_date`, `.compare_datetime` | yes |
+| `span.nanoseconds`, `.milliseconds`, `.seconds`, `.minutes`, `.hours`, `.days` | yes |
+| `span.as_seconds`, `.subsec_nanos` | yes |
+| `span.add`, `.sub`, `.negate`, `.magnitude`, `.is_negative`, `.compare` | yes |
+| `arith.add_days`, `.add_months`, `.add_years`, `.add_delta` | yes |
+| `arith.days_between`, `.months_between`, `.between` | yes |
+| `arith.start_of_month`, `.end_of_month` | yes |
+| `iso8601.parse_date`, `.parse_time`, `.parse_datetime`, `.parse_rfc3339` | yes |
+| `iso8601.format_date`, `.format_time`, `.format_datetime`, `.format_rfc3339` | yes |
+| `iso8601.parse_duration`, `.format_duration` | yes |
+| `strfmt.format`, `.parse`, `.directives` | yes |
+| `calerror.offset_of`, `CalError.message` | yes |
+
+Two functions are new in 0.1.0 and were not in the published interface.
+`civil.nano_of_day` is the one number two times of day are compared by.
+`civil.weekday_of` is the inverse of `civil.weekday_number`, which both
+parsers need to turn a weekday digit back into a `Weekday`.
 
 ## Licence
 

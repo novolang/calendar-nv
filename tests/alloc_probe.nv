@@ -1,0 +1,48 @@
+// tests/alloc_probe.nv — the program `tests/alloc_scan.sh` compiles in
+// order to read the emitted LLVM for `novo_alloc`.
+//
+// It exists to make every function of the arithmetic core appear in
+// one module's IR under its own name.  It is built with `--opt=0` for
+// exactly that reason: at the default optimisation level the whole
+// thing inlines into `novo_main`, there is nothing left to attribute
+// an allocation to, and an assertion that no core function allocates
+// would pass because no core function is there.
+//
+// The results are printed rather than checked — the vector suites own
+// correctness.  This one is here to be read as text, not run.
+
+use arith
+use calerror
+use civil
+use span
+
+fn main() [io]
+    let d = civil.date(2026, 3, 15)!
+    let t = civil.time_of(9, 30, 0, 123456789)!
+    let dt = civil.datetime(d, t)
+    println("${civil.epoch_day(d)} ${civil.day_of_year(d)}")
+    println("${civil.weekday_number(civil.weekday(d))}")
+    println("${civil.month_number(civil.month_of(d))}")
+    println("${civil.days_in_month(d.year, d.month)} ${civil.is_leap_year(d.year)}")
+    let (wy, wk) = civil.iso_week(d)
+    println("${wy} ${wk} ${civil.compare_date(d, civil.from_iso_week(wy, wk, Sun)!)}")
+    println("${civil.nano_of_day(t)} ${civil.compare_datetime(dt, dt)}")
+    println("${civil.epoch_day(civil.date_from_epoch_day(20527))}")
+    println("${civil.weekday_number(civil.weekday_of(3))}")
+    println("${civil.epoch_day(civil.date_ordinal(2026, 74)!)}")
+    println("${civil.midnight().hour}")
+    let a = span.hours(2)
+    let b = span.nanoseconds(-1500000000)
+    println("${span.as_seconds(span.add(a, b)!)} ${span.subsec_nanos(span.sub(a, b)!)}")
+    println("${span.as_seconds(span.negate(a)!)} ${span.as_seconds(span.magnitude(b)!)}")
+    println("${span.compare(a, b)} ${span.is_negative(b)}")
+    println("${span.as_seconds(span.seconds(1))} ${span.as_seconds(span.minutes(1))}")
+    println("${span.as_seconds(span.days(1))} ${span.as_seconds(span.milliseconds(1500))}")
+    println("${civil.epoch_day(arith.add_days(d, 30)!)}")
+    println("${civil.epoch_day(arith.add_months(d, 1)!)}")
+    println("${civil.epoch_day(arith.add_years(d, 1)!)}")
+    println("${civil.nano_of_day(arith.add_delta(dt, a)!.time)}")
+    println("${arith.days_between(d, d)} ${arith.months_between(d, d)}")
+    println("${span.as_seconds(arith.between(dt, dt)!)}")
+    println("${arith.start_of_month(d).day} ${arith.end_of_month(d).day}")
+    println("${calerror.offset_of(Truncated(7))}")

@@ -37,10 +37,13 @@
 // where the caller picks the shape.
 //
 // `parse` IS THE SAME TABLE READ BACKWARDS, and it is narrower than
-// `format` by necessity: `%A` and `%B` are accepted and checked for
-// consistency but contribute nothing a date can be built from, and a
-// format string that does not determine a date — no year, or no day —
-// is `BadFormat` before any input is read.
+// `format` by necessity.  `%A` and `%a` are accepted and CHECKED
+// against the date the rest of the format produced, but contribute
+// nothing a date can be built from — a weekday name names no day.
+// `%B` and `%b` do contribute: a month name is a month, so `%B %d %Y`
+// is a format that determines a date.  A format string that does not
+// determine one — no year, or no day — is `BadFormat` before any input
+// is read.
 
 use std.list
 use std.str

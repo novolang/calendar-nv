@@ -1,15 +1,15 @@
 [package]
 name        = "calendar-nv"
-version     = "0.0.3"
+version     = "0.1.0"
 description = "Civil dates, times and durations with no clock in them: proleptic Gregorian construction that validates, day and month arithmetic with the end-of-month rule written down, ISO 8601 and RFC 3339 in both directions, ISO week numbers, and a strftime-shaped formatter over a named subset."
 license     = "Apache-2.0"
 
-# An INTERFACE release: every `pub fn` body is a `todo()`, so the
-# signatures and the effect rows are published and nothing is
-# implemented.  `novo pkg publish` recognises the shape and requires
-# both the draft stability and the 0.0.x version; the first
-# implementation is the 0.1.0 published over it.
-stability   = "draft"
+# An IMPLEMENTED release: every `pub fn` has a body and every suite is
+# green, so the 0.0.x versions and the draft stability are behind it.
+# `experimental` rather than `beta`: the signatures are the ones
+# published as an interface at 0.0.1 and may still move while the
+# packages built on this one are written.
+stability   = "experimental"
 
 # `core`, and this one is easy: there is no clock, no zone database and
 # no file anywhere in the package.  Every function is arithmetic over
