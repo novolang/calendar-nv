@@ -84,6 +84,8 @@ These are the ranges every value in the package is checked against.
 novo pkg add calendar-nv
 ```
 
+This release needs a novo-lang toolchain of 0.9.1 or newer.
+
 ## Example
 
 ```novo

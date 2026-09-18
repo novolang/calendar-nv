@@ -23,7 +23,13 @@ category    = "time"
 tags        = ["date", "time", "calendar", "iso8601", "rfc3339", "duration", "chrono"]
 repository  = "https://github.com/novolang/calendar-nv"
 maintainers = ["novo-lang"]
-novo        = ">= 0.8.9"
+# Raised from 0.8.9 by this release.  `strfmt` writes a literal byte of
+# a format string back out with `str.from_byte`, which 0.9.1 added.
+# The alternative, `str.from_char`, treats its argument as a Unicode
+# code point, so a format string holding any character above U+007F —
+# `"%d. Marz"` with an umlaut in it — would come back with a
+# replacement character where each of its bytes was.
+novo        = ">= 0.9.1"
 
 # A library: no `main`, so `novo pkg build` type-checks and
 # effect-checks every module under `src/` and writes no binary.

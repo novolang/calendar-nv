@@ -11,6 +11,17 @@ with the pre-1.0 rule that a breaking change bumps the MINOR number.
 Every `pub fn` has a body, the four API suites that were red by design
 are green, and six more suites are added beside them.
 
+### Breaking
+
+- **The toolchain floor is 0.9.1**, raised from 0.8.9. `strfmt` writes
+  a literal byte of a format string back out with `str.from_byte`,
+  which 0.9.1 added. The call that existed before it,
+  `str.from_char`, reads its argument as a Unicode code point: a
+  format string holding any character above U+007F would come back
+  with a replacement character where each of its bytes was. No
+  signature changed, and a program written against 0.0.1 compiles
+  against this release on a 0.9.1 toolchain.
+
 ### Added
 
 - `civil.nano_of_day` — the nanosecond of the day a `CivilTime` names,
