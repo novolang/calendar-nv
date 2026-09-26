@@ -75,7 +75,7 @@ These are the ranges every value in the package is checked against.
 novo pkg add calendar-nv
 ```
 
-calendar-nv needs a novo-lang toolchain of 0.9.1 or newer.
+calendar-nv needs a novo-lang toolchain of 0.12.0 or newer.
 
 ## Example
 

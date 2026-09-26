@@ -5,6 +5,17 @@ All notable changes to calendar-nv are recorded here. The format is
 package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 with the pre-1.0 rule that a breaking change bumps the MINOR number.
 
+## 0.2.0 — 2026-09-26
+
+A breaking release only because the toolchain floor rises. No signature
+and no answer changed.
+
+### Breaking
+
+- **The toolchain floor is 0.12.0**, raised from 0.9.1. `strfmt.format`
+  takes the answer of a directive apart with `let … else`, which 0.12.0
+  added. The README names the new floor.
+
 ## 0.1.1 — 2026-09-18
 
 The documentation and comments in plain prose; no signature changed.

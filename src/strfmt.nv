@@ -76,11 +76,9 @@ pub fn format(dt: CivilDateTime, fmt: Str) -> Result<Str, CalError>
         elif i + 1 >= str.len(fmt)
             return Err(BadFormat(i, "a directive after the '%'"))
         else
-            match directive(dt, scan.at(fmt, i + 1))
-                Some(piece) =>
-                    out = "${out}${piece}"
-                None        =>
-                    return Err(UnknownDirective(i, "%${str.from_byte(scan.at(fmt, i + 1))}"))
+            let Some(piece) = directive(dt, scan.at(fmt, i + 1)) else
+                return Err(UnknownDirective(i, "%${str.from_byte(scan.at(fmt, i + 1))}"))
+            out = "${out}${piece}"
             skip = true
     Ok(out)
 
