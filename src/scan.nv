@@ -12,6 +12,8 @@
 
 use std.str
 
+use calerror.{ CalError }
+
 // The byte at `i`, or `-1` past either end of the string.
 //
 // One reader for the whole package, so a scan past the end is an

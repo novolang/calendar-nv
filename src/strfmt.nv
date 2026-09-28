@@ -45,6 +45,7 @@
 
 use std.list
 use std.str
+use calerror.{ CalError }
 use civil
 use scan
 

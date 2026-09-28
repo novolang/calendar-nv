@@ -28,6 +28,8 @@
 // than the 1st of March.  A library that normalises silently turns a
 // typo into a wrong answer nobody can find later.
 
+use calerror.{ CalError }
+
 // A day on the proleptic Gregorian calendar, with no zone and no time.
 //
 // The fields are what the caller wrote and what a formatter prints;

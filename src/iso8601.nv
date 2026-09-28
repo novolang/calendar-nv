@@ -36,6 +36,7 @@
 // one value with three spellings, and output picks one.
 
 use arith
+use calerror.{ CalError }
 use civil
 use scan
 use span

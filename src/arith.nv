@@ -26,6 +26,7 @@
 // to treat a month as 30 days.  `span.TimeDelta` therefore has no month
 // unit, and no function here takes one.
 
+use calerror.{ CalError }
 use civil
 use span
 

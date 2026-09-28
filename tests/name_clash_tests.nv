@@ -1,0 +1,50 @@
+// name_clash_tests.nv — the package builds beside a program that names
+// its own variants the way `CalError` does.
+//
+// A bare constructor is resolved by the file it is written in: the enum
+// declared there, then an enum the file's `use` lines bring in, and only
+// then any enum in the build (SPEC § 9.4).  Every module of this package
+// that builds a `CalError` imports it by name, `use calerror.{ CalError }`,
+// so an `Overflow` or a `Truncated` declared by the program that takes
+// the package does not make the package's own source ambiguous.  The
+// enum below is that program's enum.  If a module loses the import, this
+// file stops compiling with E2031.
+
+use std.test
+use arith
+use civil
+use iso8601
+use strfmt
+
+// A program's own fault type, spelled with two of `CalError`'s names.
+enum LocalFault
+    Overflow(why: Str)
+    Truncated(at: Int)
+
+impl Error for LocalFault
+    fn message(self) -> Str
+        return "a local fault"
+
+@test
+fn test_the_program_s_variants_do_not_reach_the_package() [io]
+    test.case("a bare Overflow in this file is the program's own")
+    let mine = Overflow("counted past the end")
+    match mine
+        Overflow(why) => test.assert_eq(why, "counted past the end")
+        Truncated(_)  => test.assert(false)
+
+    test.case("the package still answers its own Overflow")
+    let far = civil.date(999_999_999, 12, 31)!
+    match arith.add_years(far, 1)
+        Ok(_)  => test.assert(false)
+        Err(e) => test.assert(e.message() != "a local fault")
+
+    test.case("and its own Truncated")
+    match iso8601.parse_date("2026-09")
+        Ok(_)  => test.assert(false)
+        Err(e) => test.assert(e.message() != "a local fault")
+
+    test.case("the strftime reader builds beside the program's enum")
+    match strfmt.parse("2026", "%Y-%m-%d")
+        Ok(_)  => test.assert(false)
+        Err(e) => test.assert(e.message() != "a local fault")

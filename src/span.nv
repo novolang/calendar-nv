@@ -29,6 +29,8 @@
 // produce, and the reason `as_seconds` truncates toward negative
 // infinity rather than toward zero.
 
+use calerror.{ CalError }
+
 // A signed length of time, exact to the nanosecond.
 //
 // ```novo

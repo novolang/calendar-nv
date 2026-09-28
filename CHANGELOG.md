@@ -5,6 +5,24 @@ All notable changes to calendar-nv are recorded here. The format is
 package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 with the pre-1.0 rule that a breaking change bumps the MINOR number.
 
+## 0.2.1 — 2026-09-28
+
+The package builds beside a program, or another package, that declares
+a variant with the same name as one of `CalError`'s.  No signature and
+no answer changed.
+
+- Six modules built `CalError` values with bare constructors such as
+  `Overflow(...)` without importing the enum.  A bare constructor that
+  its own file neither declares nor imports is resolved across the whole
+  build (SPEC § 9.4).  A build that also held another enum with an
+  `Overflow` or a `Truncated` variant, such as chrono-nv's
+  `ChronoError`, was then refused with E2031 inside calendar-nv's
+  source.  Each of the six modules now imports the enum by name, `use
+  calerror.{ CalError }`.
+- A new suite, `tests/name_clash_tests.nv`, declares its own `Overflow`
+  and `Truncated` and calls into `arith`, `civil`, `iso8601` and
+  `strfmt`.  It fails to compile if a module loses the import.
+
 ## 0.2.0 — 2026-09-26
 
 A breaking release only because the toolchain floor rises. No signature
